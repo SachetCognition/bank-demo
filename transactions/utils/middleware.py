@@ -20,15 +20,11 @@ def request_logging_middleware(app, logger=None):
         g.correlation_id = correlation_id
         g.start_time = time.time()
         
-        logger.info(f'Incoming request: {request.method} {request.path}',
-                   method=request.method,
-                   url=request.path,
-                   user_agent=request.headers.get('User-Agent'),
-                   ip=request.remote_addr)
+        logger.info(f'Incoming request: {request.method} {request.path} - user_agent={request.headers.get("User-Agent")} ip={request.remote_addr}')
         
         if request.is_json and request.get_json(silent=True):
             sanitized_body = sanitize_data(request.get_json())
-            logger.debug(f'Request body', body=sanitized_body)
+            logger.debug(f'Request body: {sanitized_body}')
     
     @app.after_request
     def after_request(response):
@@ -39,11 +35,7 @@ def request_logging_middleware(app, logger=None):
         duration = time.time() - getattr(g, 'start_time', time.time())
         duration_ms = round(duration * 1000, 2)
         
-        logger.info(f'Request completed: {request.method} {request.path}',
-                   method=request.method,
-                   url=request.path,
-                   status_code=response.status_code,
-                   duration=f'{duration_ms}ms')
+        logger.info(f'Request completed: {request.method} {request.path} - status={response.status_code} duration={duration_ms}ms')
         
         return response
     
