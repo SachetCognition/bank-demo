@@ -8,11 +8,7 @@ import datetime
 import os
 import grpc
 
-import logging
 from flask import Flask, request, jsonify
-# set logging to debug
-logging.basicConfig(level=logging.DEBUG)
-
 
 from loan_pb2 import *
 import loan_pb2_grpc
@@ -22,8 +18,15 @@ from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 load_dotenv()
 
+os.environ['SERVICE_NAME'] = 'loan'
 
-# db_host = os.getenv("DATABASE_HOST", "localhost")
+from utils.logger import get_logger, setup_logger
+from utils.errors import register_error_handlers, ValidationError, NotFoundError
+from utils.middleware import request_logging_middleware
+from utils.health import create_health_blueprint
+
+logger = setup_logger('loan')
+
 db_url = os.getenv("DB_URL")
 if db_url is None:
     raise Exception("DB_URL environment variable is not set")
@@ -36,7 +39,7 @@ if protocol is None:
 
 protocol = protocol.lower()
 
-logging.debug(f"microservice protocol: {protocol}")
+logger.debug(f"microservice protocol: {protocol}")
 
 
 
@@ -62,12 +65,12 @@ class LoanGeneric:
         # count = collection_loans.count_documents({"email_id": email, 'account_number': account_number})
         count =  collection_accounts.count_documents({"email_id": email, 'account_number': account_number})
 
-        logging.debug(f"user account only based on account number search : {user_account}")
-        logging.debug(f"Count whther the email and account exist or not : {count}")
+        logger.debug(f"user account only based on account number search : {user_account}")
+        logger.debug(f"Count whether the email and account exist or not : {count}")
         if count == 0:
             return {"approved": False, "message": "Email or Account number not found."}
         result = self.__approveLoan(user_account, loan_amount)
-        logging.debug(f"Result {result}")
+        logger.debug(f"Result {result}")
         message = "Loan Approved" if result else "Loan Rejected"
         
         # insert loan request into db
@@ -90,8 +93,8 @@ class LoanGeneric:
         collection_loans.insert_one(loan_request)
 
         response = {"approved": result, "message": message}
-        logging.debug(f"Account: {account_number}")
-        logging.debug(f"Response: {response}")
+        logger.debug(f"Account: {account_number}")
+        logger.debug(f"Response: {response}")
         return response
 
     def getLoanHistory(self, request_data):
@@ -183,37 +186,50 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
 
 
 app = Flask(__name__)
+
+request_logging_middleware(app, logger)
+register_error_handlers(app, logger)
+
+health_bp = create_health_blueprint('loan', client)
+app.register_blueprint(health_bp)
+
 loan_generic = LoanGeneric()
+
+
 @app.route("/loan/request", methods=["POST"])
 def process_loan_request():
     request_data = request.json
-    logging.debug(f"Request: {request_data}")
+    logger.debug(f"Request: {request_data}")
     response = loan_generic.ProcessLoanRequest(request_data)
+    if response.get("approved"):
+        logger.info('Loan approved successfully',
+                   email=request_data.get('email'),
+                   loan_type=request_data.get('loan_type'),
+                   loan_amount=request_data.get('loan_amount'))
     return jsonify(response)
 
 
 @app.route("/loan/history", methods=["POST"])
 def get_loan_history():
-    logging.debug("----------------> Request: /loan/history")
+    logger.debug("Request: /loan/history")
     d = request.json
-    logging.debug(f"Request: {d}")
+    logger.debug(f"Request: {d}")
     response = loan_generic.getLoanHistory({"email": d['email']})
     return jsonify(response)
 
 
-
-
 def serverGRPC(port):
-    logging.debug(f"Starting GRPC server on port {port}")
+    logger.info(f"Starting GRPC server on port {port}")
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     loan_pb2_grpc.add_LoanServiceServicer_to_server(LoanService(), server)
     server.add_insecure_port(f"[::]:{port}")
     server.start()
     server.wait_for_termination()
 
+
 def serverFlask(port):
-    logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 if __name__ == "__main__":

@@ -11,45 +11,39 @@ from flask import Flask, request, jsonify
 
 from dotmap import DotMap
 
-# Configure the logging settings
-import logging
-
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
-)
 from transaction_pb2 import *
 import transaction_pb2_grpc
-from flask import Flask, request, jsonify
 
 from google.protobuf.json_format import MessageToDict
 
 from dotenv import load_dotenv
 load_dotenv()
 
-import logging
+os.environ['SERVICE_NAME'] = 'transactions'
 
-# set logging to debug
-logging.basicConfig(level=logging.DEBUG)
+from utils.logger import get_logger, setup_logger
+from utils.errors import register_error_handlers, ValidationError, NotFoundError
+from utils.middleware import request_logging_middleware
+from utils.health import create_health_blueprint
+
+logger = setup_logger('transactions')
 
 from pymongo.mongo_client import MongoClient
 
 
-# db_host = os.getenv("DATABASE_HOST", "localhost")
-
 db_url = os.getenv("DB_URL")
 if db_url is None:
-    raise Exception("DB_URL environment variable is not set")                   
+    raise Exception("DB_URL environment variable is not set")
 
 uri = db_url
 
 
-# protocol = os.getenv('SERVICE_PROTOCOL')
 protocol = os.getenv('SERVICE_PROTOCOL', 'http')
 if protocol is None:
     raise Exception("SERVICE_PROTOCOL environment variable is not set")
 
 protocol = protocol.lower()
-logging.debug(f"microservice protocol: {protocol}")
+logger.debug(f"microservice protocol: {protocol}")
 
 
 
@@ -69,7 +63,7 @@ class TransactionGeneric:
 
     def GetTransactionByID(self, request):
         transaction_id = request.transaction_id
-        logging.debug(f"Transaction ID: {transaction_id}")
+        logger.debug(f"Transaction ID: {transaction_id}")
         count = collection_transactions.count_documents(
             {"_id": ObjectId(transaction_id)}
         )
@@ -146,8 +140,8 @@ class TransactionGeneric:
         result = self.__doTransaction(
             sender_account, receiver_account, amount, reason=reason
         )
-        logging.debug(f"---> sender: {sender_account}")
-        logging.debug(f"--->receiver: {receiver_account}")
+        logger.debug(f"---> sender: {sender_account}")
+        logger.debug(f"--->receiver: {receiver_account}")
         return result
 
     def __doTransaction(self, sender, receiver, amount, reason=""):
@@ -183,9 +177,8 @@ class TransactionGeneric:
         return {"approved": True, "message": "Transaction is Successful."}
 
     def __getAccountwithEmail(self, email):
-        logging.debug(f"Email: {email}")
-        # log the document with the email
-        logging.debug(
+        logger.debug(f"Email: {email}")
+        logger.debug(
             f"Document with email: {collection_accounts.count_documents({'email_id': email, 'account_type': 'Checking'})}"
         )
 
@@ -201,7 +194,7 @@ class TransactionGeneric:
                 {"email_id": email, "account_type": "Checking"}
             )
             document = checking_account[0]
-            logging.debug(f"Checking Account: {document}")
+            logger.debug(f"Checking Account: {document}")
             return document
         else:
             if (
@@ -214,10 +207,9 @@ class TransactionGeneric:
                     {"email_id": email, "account_type": "Savings"}
                 )
                 document = saving_account[0]
-                logging.debug(f"Savings Account: {document}")
+                logger.debug(f"Savings Account: {document}")
                 return document
-            # logging.debug(f"Savings Account: {document}")
-        logging.debug("No Account Found")
+        logger.debug("No Account Found")
         return document
 
     def __getAccount(self, account_num):
@@ -284,30 +276,51 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
 
 
 app = Flask(__name__)
+
+request_logging_middleware(app, logger)
+register_error_handlers(app, logger)
+
+health_bp = create_health_blueprint('transactions', client)
+app.register_blueprint(health_bp)
+
 transaction_generic = TransactionGeneric()
+
 
 @app.route("/transfer", methods=["POST"])
 def sendMoney():
     data = request.json
     data = DotMap(data)
     result = transaction_generic.SendMoney(data)
+    if result.get("approved"):
+        logger.info('Transaction completed successfully',
+                   sender=data.sender_account_number,
+                   receiver=data.receiver_account_number,
+                   amount=data.amount)
     return jsonify(result)
+
 
 @app.route("/zelle", methods=["POST"])
 def zelle():
-    logging.debug(" Zelle API called")
+    logger.debug("Zelle API called")
     data = request.json
     data = DotMap(data)
     result = transaction_generic.Zelle(data)
+    if result.get("approved"):
+        logger.info('Zelle transfer completed successfully',
+                   sender_email=data.sender_email,
+                   receiver_email=data.receiver_email,
+                   amount=data.amount)
     return jsonify(result)
+
 
 @app.route("/transaction-with-id", methods=["POST"])
 def getTransactionByID():
-    logging.debug(" Get Transaction By ID API called")
+    logger.debug("Get Transaction By ID API called")
     data = request.json
     data = DotMap(data)
     result = transaction_generic.GetTransactionByID(data)
     return jsonify(result)
+
 
 @app.route("/transaction-history", methods=["POST"])
 def getTransactionsHistory():
@@ -317,10 +330,9 @@ def getTransactionsHistory():
     return jsonify(result)
 
 
-
 def serverFlask(port):
-    logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 def serverGRPC(port):
@@ -329,7 +341,7 @@ def serverGRPC(port):
         TransactionService(), server
     )
     server.add_insecure_port(f"[::]:{port}")
-    logging.debug(f"Starting server. Listening on port {port}.")
+    logger.info(f"Starting server. Listening on port {port}.")
     server.start()
     server.wait_for_termination()
 

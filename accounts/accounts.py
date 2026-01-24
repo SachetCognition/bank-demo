@@ -9,15 +9,21 @@ import os
 import grpc
 from accounts_pb2 import *
 import accounts_pb2_grpc
-import logging
 from dotmap import DotMap
 from pymongo.mongo_client import MongoClient
 from flask import Flask, request, jsonify
-# set logging to debug
-logging.basicConfig(level=logging.DEBUG)
 
 from dotenv import load_dotenv
 load_dotenv()
+
+os.environ['SERVICE_NAME'] = 'accounts'
+
+from utils.logger import get_logger, setup_logger
+from utils.errors import register_error_handlers, ValidationError, NotFoundError
+from utils.middleware import request_logging_middleware
+from utils.health import create_health_blueprint
+
+logger = setup_logger('accounts')
 
 # db_host = os.getenv("DATABASE_HOST", "localhost")
 db_url = os.getenv("DB_URL")
@@ -31,7 +37,7 @@ if protocol is None:
     raise Exception("SERVICE_PROTOCOL environment variable is not set")
 
 protocol = protocol.lower()
-logging.debug(f"microservice protocol: {protocol}")
+logger.debug(f"microservice protocol: {protocol}")
 
 
 uri = db_url
@@ -43,31 +49,25 @@ collection = db["accounts"]
 
 class AccountsGeneric:
     def getAccountDetails(self, request):
-        logging.debug("Get Account Details called")
+        logger.debug("Get Account Details called")
         account = collection.find_one({"account_number": request.account_number})
 
-      
-
         if account:
-            return  {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
-    
+            return {'account_number': account["account_number"], 'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
 
         return {}
 
-    # Todo: check if the account already exist or not
-
     def createAccount(self, request):
-        logging.debug("Create Account called")
-        # find the account with email and account type if it already exist then return false
+        logger.debug("Create Account called")
         count = collection.count_documents(
             {"email_id": request.email_id, "account_type": request.account_type}
         )
 
-        logging.debug(f" count: {count}")
+        logger.debug(f"count: {count}")
 
         if count > 0:
-            logging.debug("Account already exist")
-            return False  # CreateAccountResponse(result=False)
+            logger.debug("Account already exist")
+            return False
 
         account = {
             "email_id": request.email_id,
@@ -136,9 +136,7 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
         self.accounts = AccountsGeneric()
 
     def getAccountDetails(self, request, context):
-
-        logging.debug("Get Account Details called")
-
+        logger.debug("Get Account Details called")
         account = self.accounts.getAccountDetails(request)
 
         if len(account) > 0:
@@ -177,21 +175,33 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
 
 app = Flask(__name__)
+
+request_logging_middleware(app, logger)
+register_error_handlers(app, logger)
+
+health_bp = create_health_blueprint('accounts', client)
+app.register_blueprint(health_bp)
+
 accounts_generic = AccountsGeneric()
+
+
 @app.route("/account-detail", methods=["POST"])
 def getAccountDetails():
     data = request.json
     data = DotMap(data)
-    # account_number = request.json["account_number"]
     account = accounts_generic.getAccountDetails(data)
     return jsonify(account)
+
 
 @app.route("/create-account", methods=["POST"])
 def createAccount():
     data = request.json
     data = DotMap(data)
     result = accounts_generic.createAccount(data)
+    if result:
+        logger.info('Account created successfully', email=data.email_id, account_type=data.account_type)
     return jsonify(result)
+
 
 @app.route("/get-all-accounts", methods=["POST"])
 def getAccounts():
@@ -201,23 +211,18 @@ def getAccounts():
     return jsonify(accounts)
 
 
-
 def serverFlask(port):
-    logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)    
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=True)
 
 
 def serverGRPC(port):
-    # recommendations_host = os.getenv("RECOMMENDATIONS_HOST", "localhost")
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
     accounts_pb2_grpc.add_AccountDetailsServiceServicer_to_server(
         AccountDetailsService(), server
     )
     server.add_insecure_port(f"[::]:{port}")
-    # server.add_insecure_port(f"{recommendations_host}:50051")
-    # print server ip and port
-    logging.debug(f"Server started at port {port}")
-    # print IP
+    logger.info(f"Server started at port {port}")
     server.start()
     server.wait_for_termination()
 
