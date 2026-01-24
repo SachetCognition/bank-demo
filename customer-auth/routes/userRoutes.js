@@ -4,29 +4,27 @@
  * license that can be found in the LICENSE file.
  */
 
-import express from "express";
+import express from 'express';
 import {
   authUser,
   registerUser,
   logoutUser,
+  checkAuth,
   getUserProfile,
   updateUserProfile,
-} from "../controllers/userController.js";
-import { protect } from "../middleware/authMiddleware.js";
+} from '../controllers/userController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post("/", registerUser);
+router.post('/', registerUser);
 
-router.post("/auth", authUser);
+router.post('/auth', authUser);
 
-router.post("/logout", logoutUser);
+router.post('/logout', logoutUser);
 
-router.route("/profile").post(getUserProfile).put(updateUserProfile);
+router.get('/check-auth', protect, checkAuth);
 
-// router
-//   .route("/profile")
-//   .get(protect, getUserProfile)
-//   .put(protect, updateUserProfile);
+router.route('/profile').post(getUserProfile).put(updateUserProfile);
 
 export default router;

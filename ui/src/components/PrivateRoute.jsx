@@ -5,10 +5,30 @@
  */
 
 import { Navigate, Outlet } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { useEffect } from "react";
+import { useCheckAuthQuery } from "../slices/usersApiSlice";
+import { setCredentials, logout } from "../slices/authSlice";
 
 const PrivateRoute = () => {
-  const { userInfo } = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
+  const { userInfo, isLoading } = useSelector((state) => state.auth);
+  const { data, error, isLoading: isCheckingAuth } = useCheckAuthQuery(undefined, {
+    skip: userInfo !== null,
+  });
+
+  useEffect(() => {
+    if (data) {
+      dispatch(setCredentials(data));
+    } else if (error) {
+      dispatch(logout());
+    }
+  }, [data, error, dispatch]);
+
+  if (isLoading || isCheckingAuth) {
+    return <div>Loading...</div>;
+  }
+
   return userInfo ? <Outlet /> : <Navigate to="/login" replace />;
 };
 export default PrivateRoute;

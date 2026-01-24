@@ -4,10 +4,9 @@
  * license that can be found in the LICENSE file.
  */
 
-import asyncHandler from "express-async-handler";
-import User from "../models/userModel.js";
-// import { Worker } from 'worker_threads';
-// import generateToken from "../utils/generateToken.js";
+import asyncHandler from 'express-async-handler';
+import User from '../models/userModel.js';
+import generateToken from '../utils/generateToken.js';
 
 // @desc    Register a new user
 // @route   POST /api/users
@@ -18,14 +17,14 @@ const registerUser = asyncHandler(async (req, res) => {
 
     if (!name || !email || !password) {
       res.status(400);
-      throw new Error("Name, email and password are required");
+      throw new Error('Name, email and password are required');
     }
 
     const userExists = await User.findOne({ email });
 
     if (userExists) {
       res.status(400);
-      throw new Error("User already exists");
+      throw new Error('User already exists');
     }
 
     const user = await User.create({
@@ -43,13 +42,13 @@ const registerUser = asyncHandler(async (req, res) => {
       });
     } else {
       res.status(400);
-      throw new Error("Invalid user data");
+      throw new Error('Invalid user data');
     }
   } catch (error) {
     res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({
-      message: error.message || "Internal Server Error",
-      stack: process.env.NODE_ENV === "production" ? null : error.stack,
+      message: error.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack,
     });
   }
 });
@@ -63,13 +62,13 @@ const authUser = asyncHandler(async (req, res) => {
 
     if (!email || !password) {
       res.status(400);
-      throw new Error("Email and password are required");
+      throw new Error('Email and password are required');
     }
 
     const user = await User.findOne({ email });
 
     if (user && (await user.matchPassword(password))) {
-      // generateToken(res, user._id);
+      generateToken(res, user._id);
       res.json({
         _id: user._id,
         name: user.name,
@@ -77,14 +76,14 @@ const authUser = asyncHandler(async (req, res) => {
       });
     } else {
       res.status(400);
-      throw new Error("Invalid email or password");
+      throw new Error('Invalid email or password');
     }
   } catch (error) {
     res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({
       status: false,
-      message: error.message || "Internal Server Error",
-      stack: process.env.NODE_ENV === "production" ? null : error.stack,
+      message: error.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack,
     });
   }
 
@@ -111,38 +110,39 @@ const authUser = asyncHandler(async (req, res) => {
 // @access  Public
 const logoutUser = (req, res) => {
   try {
-    // const jwtCookie = req.headers.authorization;
-
-    // if (jwtCookie === undefined) {
-    //   res.status(400);
-    //   throw new Error("No JWT cookie found");
-    // }
-    // else{
-    //   res.status(200).json({ message: "Logged out successfully" });
-    // }
-
-    res.status(200).json({ message: "Logged out successfully" });
-
-    // res.cookie("jwt", "", {
-    //   httpOnly: true,
-    //   expires: new Date(0),
-    // });
-    // res.status(200).json({ message: "Logged out successfully" });
+    res.cookie('jwt', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      expires: new Date(0),
+    });
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({
-      message: error.message || "Internal Server Error",
-      stack: process.env.NODE_ENV === "production" ? null : error.stack,
+      message: error.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack,
     });
   }
 };
+
+// @desc    Check authentication status
+// @route   GET /api/users/check-auth
+// @access  Private
+const checkAuth = asyncHandler(async (req, res) => {
+  res.json({
+    _id: req.user._id,
+    name: req.user.name,
+    email: req.user.email,
+  });
+});
 
 // @desc    Get user profile
 // @route   POST api/users/profile
 // @access  Private
 const getUserProfile = asyncHandler(async (req, res) => {
   try {
-    const user = await User.findOne({email: req.body.email});
+    const user = await User.findOne({ email: req.body.email });
 
     if (user) {
       res.json({
@@ -152,14 +152,14 @@ const getUserProfile = asyncHandler(async (req, res) => {
       });
     } else {
       res.status(404);
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
   } catch (error) {
     res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({
-      message: error.message || "Internal Server Error",
-      stack: process.env.NODE_ENV === "production" ? null : error.stack,
-      feedback: "",
+      message: error.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack,
+      feedback: '',
     });
   }
 });
@@ -169,7 +169,7 @@ const getUserProfile = asyncHandler(async (req, res) => {
 // @access  Private
 const updateUserProfile = asyncHandler(async (req, res) => {
   try {
-    const user = await User.findOne({email: req.body.email});
+    const user = await User.findOne({ email: req.body.email });
 
     if (user) {
       user.password = req.body.password || user.password;
@@ -181,17 +181,16 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         name: updatedUser.name,
         email: updatedUser.email,
       });
-      
     } else {
       res.status(404);
-      throw new Error("User not found");
+      throw new Error('User not found');
     }
   } catch (error) {
     res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({
-      message: error.message || "Internal Server Error",
-      stack: process.env.NODE_ENV === "production" ? null : error.stack,
-      feedback: "",
+      message: error.message || 'Internal Server Error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack,
+      feedback: '',
     });
   }
 });
@@ -200,6 +199,7 @@ export {
   authUser,
   registerUser,
   logoutUser,
+  checkAuth,
   getUserProfile,
   updateUserProfile,
 };
