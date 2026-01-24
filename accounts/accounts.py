@@ -13,6 +13,8 @@ import logging
 from dotmap import DotMap
 from pymongo.mongo_client import MongoClient
 from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -177,6 +179,15 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
 
 app = Flask(__name__)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 accounts_generic = AccountsGeneric()
 @app.route("/account-detail", methods=["POST"])
 def getAccountDetails():

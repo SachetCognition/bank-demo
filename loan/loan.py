@@ -10,6 +10,8 @@ import grpc
 
 import logging
 from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -183,6 +185,15 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
 
 
 app = Flask(__name__)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 loan_generic = LoanGeneric()
 @app.route("/loan/request", methods=["POST"])
 def process_loan_request():

@@ -8,6 +8,8 @@ from bson.objectid import ObjectId
 import os
 import grpc
 from flask import Flask, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from dotmap import DotMap
 
@@ -19,7 +21,6 @@ logging.basicConfig(
 )
 from transaction_pb2 import *
 import transaction_pb2_grpc
-from flask import Flask, request, jsonify
 
 from google.protobuf.json_format import MessageToDict
 
@@ -284,6 +285,15 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
 
 
 app = Flask(__name__)
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 transaction_generic = TransactionGeneric()
 
 @app.route("/transfer", methods=["POST"])
