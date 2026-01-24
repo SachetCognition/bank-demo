@@ -3,10 +3,8 @@
 # license that can be found in the LICENSE file.
 
 import os
-import logging
 import json
 
-# from google.protobuf.json_format import MessageToDict
 from flask_cors import CORS
 
 from flask import Flask, render_template, request, jsonify
@@ -14,6 +12,15 @@ import grpc
 
 from dotenv import load_dotenv
 load_dotenv()
+
+os.environ['SERVICE_NAME'] = 'dashboard'
+
+from utils.logger import get_logger, setup_logger
+from utils.errors import register_error_handlers, ServiceError, ValidationError
+from utils.middleware import request_logging_middleware
+from utils.health import create_health_blueprint
+
+logger = setup_logger('dashboard')
 
 from accounts_pb2 import *
 from accounts_pb2_grpc import *
@@ -28,9 +35,6 @@ from pymongo.mongo_client import MongoClient
 
 import requests as flask_client_requests
 
-# set logging to debug
-logging.basicConfig(level=logging.DEBUG)
-
 
 # db_host = os.getenv("DATABASE_HOST", "localhost")
 db_url = os.getenv("DB_URL")
@@ -39,7 +43,7 @@ if db_url is None:
 
 uri = db_url
 
-logging.debug(f"Connecting to MongoDB at {uri}")
+logger.debug(f"Connecting to MongoDB at {uri}")
 
 # protocol = os.getenv('SERVICE_PROTOCOL')
 protocol = os.getenv('SERVICE_PROTOCOL', 'http')
@@ -48,7 +52,7 @@ if protocol is None:
     raise Exception("SERVICE_PROTOCOL environment variable is not set")
 
 protocol = protocol.lower()
-logging.debug(f"microservice protocol: {protocol}")
+logger.debug(f"microservice protocol: {protocol}")
 
 
 client = MongoClient(uri)
@@ -58,6 +62,12 @@ collection = db["accounts"]
 
 app = Flask(__name__)
 CORS(app)
+
+request_logging_middleware(app, logger)
+register_error_handlers(app, logger)
+
+health_bp = create_health_blueprint('dashboard', client)
+app.register_blueprint(health_bp)
 
 
 @app.route("/")

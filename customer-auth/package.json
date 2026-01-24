@@ -28,7 +28,9 @@
     "mongoose": "^7.1.0",
     "morgan": "^1.10.0",
     "swagger-jsdoc": "^6.2.8",
-    "swagger-ui-express": "^4.6.3"
+    "swagger-ui-express": "^4.6.3",
+    "uuid": "^9.0.0",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "concurrently": "^8.0.1",
