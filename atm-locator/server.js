@@ -16,6 +16,7 @@ import colors from "colors";
 import { swaggerDocs } from './utils/swagger.js';
 
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
+import { generalLimiter, searchLimiter } from "./middleware/rateLimitMiddleware.js";
 
 import atmRoutes from "./routes/atmRoutes.js";
 
@@ -35,6 +36,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors({credentials: true, origin: true}));
 app.use(cookieParser());
 app.use(morgan("dev"));
+
+// Apply rate limiting
+app.use(generalLimiter);
+app.use("/api/atm", searchLimiter);
 
 // mounting routes
 app.use("/api/atm", atmRoutes);

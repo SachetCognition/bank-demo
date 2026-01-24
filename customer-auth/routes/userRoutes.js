@@ -4,29 +4,35 @@
  * license that can be found in the LICENSE file.
  */
 
-import express from "express";
+import express from 'express';
 import {
   authUser,
   registerUser,
   logoutUser,
+  refreshToken,
   getUserProfile,
   updateUserProfile,
-} from "../controllers/userController.js";
-import { protect } from "../middleware/authMiddleware.js";
+} from '../controllers/userController.js';
+import { protect, authorize } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.post("/", registerUser);
+// Public routes
+router.post('/', registerUser);
+router.post('/auth', authUser);
+router.post('/logout', logoutUser);
+router.post('/refresh', refreshToken);
 
-router.post("/auth", authUser);
+// Protected routes - require authentication
+router
+  .route('/profile')
+  .get(protect, getUserProfile)
+  .post(protect, getUserProfile)
+  .put(protect, updateUserProfile);
 
-router.post("/logout", logoutUser);
-
-router.route("/profile").post(getUserProfile).put(updateUserProfile);
-
-// router
-//   .route("/profile")
-//   .get(protect, getUserProfile)
-//   .put(protect, updateUserProfile);
+// Admin-only routes (example)
+router.get('/admin/users', protect, authorize('admin'), (req, res) => {
+  res.json({ message: 'Admin access granted' });
+});
 
 export default router;
