@@ -9,9 +9,9 @@ import ApiUrls from "./apiUrls";
 
 const usersUrl = import.meta.env.VITE_USERS_URL || ApiUrls.VITE_USERS_URL;
 
-// const baseQuery = fetchBaseQuery({ baseUrl: 'http://host.docker.internal:8000/' });
 const baseQuery = fetchBaseQuery({ 
   baseUrl: "",
+  credentials: 'include',
 });
 
 export const apiSlice = createApi({
@@ -27,17 +27,12 @@ export const userApiSlice = apiSlice.injectEndpoints({
         url: `${usersUrl}/auth`,
         method: "POST",
         body: data,
-        // credentials: 'include',
       }),
     }),
     logout: builder.mutation({
-      query: (data) => ({
+      query: () => ({
         url: `${usersUrl}/logout`,
         method: "POST",
-        body: data,
-        headers: {
-          'Content-Type': 'application/json',
-        },
       }),
     }),
     register: builder.mutation({
@@ -52,10 +47,12 @@ export const userApiSlice = apiSlice.injectEndpoints({
         url: `${usersUrl}/profile`,
         method: "PUT",
         body: data,
-        // headers: {
-        //   'Content-Type': 'application/json',
-        //   'Authorization': data.token
-        // },
+      }),
+    }),
+    checkAuth: builder.query({
+      query: () => ({
+        url: `${usersUrl}/check-auth`,
+        method: "GET",
       }),
     }),
   }),
@@ -66,4 +63,5 @@ export const {
   useLogoutMutation,
   useRegisterMutation,
   useUpdateUserMutation,
+  useCheckAuthQuery,
 } = userApiSlice;

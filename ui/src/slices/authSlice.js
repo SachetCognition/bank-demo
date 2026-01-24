@@ -5,12 +5,10 @@
  */
 
 import { createSlice } from '@reduxjs/toolkit';
-import Cookies from 'js-cookie';
 
 const initialState = {
-  userInfo: localStorage.getItem('userInfo')
-    ? JSON.parse(localStorage.getItem('userInfo'))
-    : null,
+  userInfo: null,
+  isLoading: true,
 };
 
 const authSlice = createSlice({
@@ -19,16 +17,18 @@ const authSlice = createSlice({
   reducers: {
     setCredentials: (state, action) => {
       state.userInfo = action.payload;
-      localStorage.setItem('userInfo', JSON.stringify(action.payload));
+      state.isLoading = false;
     },
     logout: (state) => {
       state.userInfo = null;
-      // Cookies.remove('jwt');
-      localStorage.removeItem('userInfo');
+      state.isLoading = false;
+    },
+    setLoading: (state, action) => {
+      state.isLoading = action.payload;
     },
   },
 });
 
-export const { setCredentials, logout } = authSlice.actions;
+export const { setCredentials, logout, setLoading } = authSlice.actions;
 
 export default authSlice.reducer;
