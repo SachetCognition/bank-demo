@@ -4,6 +4,8 @@ grpcio
 grpcio-tools
 pymongo
 pytest
+pytest-mock
+mongomock
 requests
 dotmap
 python-dotenv
