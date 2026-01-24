@@ -22,6 +22,14 @@ import transaction_pb2_grpc
 from flask import Flask, request, jsonify
 
 from google.protobuf.json_format import MessageToDict
+from marshmallow import ValidationError
+from validation import (
+    validate_send_money,
+    validate_zelle,
+    validate_get_transaction_by_id,
+    validate_get_transaction_history,
+    sanitize_dict
+)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -288,33 +296,57 @@ transaction_generic = TransactionGeneric()
 
 @app.route("/transfer", methods=["POST"])
 def sendMoney():
-    data = request.json
-    data = DotMap(data)
-    result = transaction_generic.SendMoney(data)
-    return jsonify(result)
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_send_money(data)
+        data = DotMap(validated_data)
+        result = transaction_generic.SendMoney(data)
+        return jsonify(result)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 @app.route("/zelle", methods=["POST"])
 def zelle():
-    logging.debug(" Zelle API called")
-    data = request.json
-    data = DotMap(data)
-    result = transaction_generic.Zelle(data)
-    return jsonify(result)
+    try:
+        logging.debug(" Zelle API called")
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_zelle(data)
+        data = DotMap(validated_data)
+        result = transaction_generic.Zelle(data)
+        return jsonify(result)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 @app.route("/transaction-with-id", methods=["POST"])
 def getTransactionByID():
-    logging.debug(" Get Transaction By ID API called")
-    data = request.json
-    data = DotMap(data)
-    result = transaction_generic.GetTransactionByID(data)
-    return jsonify(result)
+    try:
+        logging.debug(" Get Transaction By ID API called")
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_get_transaction_by_id(data)
+        data = DotMap(validated_data)
+        result = transaction_generic.GetTransactionByID(data)
+        return jsonify(result)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 @app.route("/transaction-history", methods=["POST"])
 def getTransactionsHistory():
-    data = request.json
-    data = DotMap(data)
-    result = transaction_generic.GetTransactionsHistory(data)
-    return jsonify(result)
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_get_transaction_history(data)
+        data = DotMap(validated_data)
+        result = transaction_generic.GetTransactionsHistory(data)
+        return jsonify(result)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 

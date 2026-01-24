@@ -11,6 +11,24 @@ from flask_cors import CORS
 
 from flask import Flask, render_template, request, jsonify
 import grpc
+from marshmallow import ValidationError
+from validation import (
+    validate_create_account,
+    validate_get_accounts,
+    validate_get_account_detail,
+    validate_transaction,
+    validate_zelle,
+    validate_get_transaction_history,
+    validate_get_transaction_by_id,
+    validate_loan_request,
+    validate_loan_history,
+    validate_register_user,
+    validate_login_user,
+    validate_profile_user,
+    validate_get_atms,
+    validate_get_specific_atm,
+    sanitize_form_data
+)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -598,40 +616,54 @@ def loan_history():
 
 @app.route("/api/users", methods=["POST"])
 def register_user():
-    logging.debug("=========================> register user called")
+    try:
+        logging.debug("=========================> register user called")
+        data = request.json
+        if data is None:
+            return json.dumps({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_register_user(data)
 
-    customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
-    logging.debug(
-        f"=========================> forwarding to {customer_auth_host}:8000/api/users"
-    )
+        customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
+        logging.debug(
+            f"=========================> forwarding to {customer_auth_host}:8000/api/users"
+        )
 
-    user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users", json=request.json
-    ).json()
-    logging.debug(
-        f"=========================> response from {customer_auth_host}:8000/api/users: {user_data}"
-    )
+        user_data = flask_client_requests.post(
+            f"http://{customer_auth_host}:8000/api/users", json=validated_data
+        ).json()
+        logging.debug(
+            f"=========================> response from {customer_auth_host}:8000/api/users: {user_data}"
+        )
 
-    return json.dumps(user_data)
+        return json.dumps(user_data)
+    except ValidationError as err:
+        return json.dumps({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 @app.route("/api/users/auth", methods=["POST"])
 def login_user():
-    logging.debug("=========================> login user called")
+    try:
+        logging.debug("=========================> login user called")
+        data = request.json
+        if data is None:
+            return json.dumps({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_login_user(data)
 
-    customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
-    logging.debug(
-        f"=========================> forwarding to {customer_auth_host}:8000/api/users/auth"
-    )
+        customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
+        logging.debug(
+            f"=========================> forwarding to {customer_auth_host}:8000/api/users/auth"
+        )
 
-    user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users/auth", json=request.json
-    ).json()
-    logging.debug(
-        f"=========================> response from {customer_auth_host}:8000/api/users/auth: {user_data}"
-    )
+        user_data = flask_client_requests.post(
+            f"http://{customer_auth_host}:8000/api/users/auth", json=validated_data
+        ).json()
+        logging.debug(
+            f"=========================> response from {customer_auth_host}:8000/api/users/auth: {user_data}"
+        )
 
-    return json.dumps(user_data)
+        return json.dumps(user_data)
+    except ValidationError as err:
+        return json.dumps({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 @app.route("/api/users/logout", methods=["POST"])
@@ -655,68 +687,86 @@ def logout_user():
 
 @app.route("/api/users/profile", methods=["GET", "PUT"])
 def profile_user():
-    logging.debug("=========================> profile user called")
+    try:
+        logging.debug("=========================> profile user called")
+        data = request.json
+        if data is None:
+            return json.dumps({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_profile_user(data)
 
-    customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
-    logging.debug(
-        f"=========================> forwarding to {customer_auth_host}:8000/api/users/profile"
-    )
-
-    if request.method == "GET":
-        user_data = flask_client_requests.get(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
-        ).json()
+        customer_auth_host = os.getenv("CUSTOMER_AUTH_HOST", "localhost")
         logging.debug(
-            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
+            f"=========================> forwarding to {customer_auth_host}:8000/api/users/profile"
         )
 
-    if request.method == "PUT":
-        user_data = flask_client_requests.put(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
-        ).json()
-        logging.debug(
-            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
-        )
+        if request.method == "GET":
+            user_data = flask_client_requests.get(
+                f"http://{customer_auth_host}:8000/api/users/profile", json=validated_data
+            ).json()
+            logging.debug(
+                f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
+            )
 
-    return json.dumps(user_data)
+        if request.method == "PUT":
+            user_data = flask_client_requests.put(
+                f"http://{customer_auth_host}:8000/api/users/profile", json=validated_data
+            ).json()
+            logging.debug(
+                f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
+            )
+
+        return json.dumps(user_data)
+    except ValidationError as err:
+        return json.dumps({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 @app.route("/api/atm/", methods=["POST"])
 def get_atms():
-    logging.debug("=========================> get atms called")
+    try:
+        logging.debug("=========================> get atms called")
+        data = request.json
+        if data is None:
+            data = {}
+        validated_data = validate_get_atms(data)
 
-    atm_locator_host = os.getenv("ATM_LOCATOR_HOST", "localhost")
-    logging.debug(
-        f"=========================> forwarding to {atm_locator_host}:8001/api/atm"
-    )
+        atm_locator_host = os.getenv("ATM_LOCATOR_HOST", "localhost")
+        logging.debug(
+            f"=========================> forwarding to {atm_locator_host}:8001/api/atm"
+        )
 
-    atm_data = flask_client_requests.post(
-        f"http://{atm_locator_host}:8001/api/atm", json=request.json
-    ).json()
-    logging.debug(
-        f"=========================> response from {atm_locator_host}:8001/api/atm: {atm_data}"
-    )
+        atm_data = flask_client_requests.post(
+            f"http://{atm_locator_host}:8001/api/atm", json=validated_data
+        ).json()
+        logging.debug(
+            f"=========================> response from {atm_locator_host}:8001/api/atm: {atm_data}"
+        )
 
-    return json.dumps(atm_data)
+        return json.dumps(atm_data)
+    except ValidationError as err:
+        return json.dumps({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 @app.route("/api/atm/<string:id>", methods=["GET"])
 def get_specific_atm(id):
-    logging.debug("=========================> get specific atm called")
+    try:
+        logging.debug("=========================> get specific atm called")
+        validated_data = validate_get_specific_atm({"id": id})
 
-    atm_locator_host = os.getenv("ATM_LOCATOR_HOST", "localhost")
-    logging.debug(
-        f"=========================> forwarding to {atm_locator_host}:8001/api/atm/{id}"
-    )
+        atm_locator_host = os.getenv("ATM_LOCATOR_HOST", "localhost")
+        logging.debug(
+            f"=========================> forwarding to {atm_locator_host}:8001/api/atm/{validated_data['id']}"
+        )
 
-    atm_data = flask_client_requests.get(
-        f"http://{atm_locator_host}:8001/api/atm/{id}"
-    ).json()
-    logging.debug(
-        f"=========================> response from {atm_locator_host}:8001/api/atm/{id}: {atm_data}"
-    )
+        atm_data = flask_client_requests.get(
+            f"http://{atm_locator_host}:8001/api/atm/{validated_data['id']}"
+        ).json()
+        logging.debug(
+            f"=========================> response from {atm_locator_host}:8001/api/atm/{validated_data['id']}: {atm_data}"
+        )
 
-    return json.dumps(atm_data)
+        return json.dumps(atm_data)
+    except ValidationError as err:
+        return json.dumps({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 if __name__ == "__main__":

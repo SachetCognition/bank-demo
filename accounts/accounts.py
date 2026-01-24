@@ -13,6 +13,13 @@ import logging
 from dotmap import DotMap
 from pymongo.mongo_client import MongoClient
 from flask import Flask, request, jsonify
+from marshmallow import ValidationError
+from validation import (
+    validate_create_account,
+    validate_get_account_detail,
+    validate_get_accounts,
+    sanitize_dict
+)
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -178,27 +185,45 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
 app = Flask(__name__)
 accounts_generic = AccountsGeneric()
+
 @app.route("/account-detail", methods=["POST"])
 def getAccountDetails():
-    data = request.json
-    data = DotMap(data)
-    # account_number = request.json["account_number"]
-    account = accounts_generic.getAccountDetails(data)
-    return jsonify(account)
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_get_account_detail(data)
+        data = DotMap(validated_data)
+        account = accounts_generic.getAccountDetails(data)
+        return jsonify(account)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 @app.route("/create-account", methods=["POST"])
 def createAccount():
-    data = request.json
-    data = DotMap(data)
-    result = accounts_generic.createAccount(data)
-    return jsonify(result)
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_create_account(data)
+        data = DotMap(validated_data)
+        result = accounts_generic.createAccount(data)
+        return jsonify(result)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 @app.route("/get-all-accounts", methods=["POST"])
 def getAccounts():
-    data = request.json
-    data = DotMap(data)
-    accounts = accounts_generic.getAccounts(data)
-    return jsonify(accounts)
+    try:
+        data = request.json
+        if data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        validated_data = validate_get_accounts(data)
+        data = DotMap(validated_data)
+        accounts = accounts_generic.getAccounts(data)
+        return jsonify(accounts)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 

@@ -10,6 +10,12 @@ import grpc
 
 import logging
 from flask import Flask, request, jsonify
+from marshmallow import ValidationError
+from validation import (
+    validate_process_loan_request,
+    validate_get_loan_history,
+    sanitize_dict
+)
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -184,21 +190,34 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
 
 app = Flask(__name__)
 loan_generic = LoanGeneric()
+
 @app.route("/loan/request", methods=["POST"])
 def process_loan_request():
-    request_data = request.json
-    logging.debug(f"Request: {request_data}")
-    response = loan_generic.ProcessLoanRequest(request_data)
-    return jsonify(response)
+    try:
+        request_data = request.json
+        if request_data is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        logging.debug(f"Request: {request_data}")
+        validated_data = validate_process_loan_request(request_data)
+        response = loan_generic.ProcessLoanRequest(validated_data)
+        return jsonify(response)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 @app.route("/loan/history", methods=["POST"])
 def get_loan_history():
-    logging.debug("----------------> Request: /loan/history")
-    d = request.json
-    logging.debug(f"Request: {d}")
-    response = loan_generic.getLoanHistory({"email": d['email']})
-    return jsonify(response)
+    try:
+        logging.debug("----------------> Request: /loan/history")
+        d = request.json
+        if d is None:
+            return jsonify({"success": False, "message": "Request body is required", "errors": ["No JSON data provided"]}), 400
+        logging.debug(f"Request: {d}")
+        validated_data = validate_get_loan_history(d)
+        response = loan_generic.getLoanHistory({"email": validated_data['email']})
+        return jsonify(response)
+    except ValidationError as err:
+        return jsonify({"success": False, "message": "Validation failed", "errors": err.messages}), 400
 
 
 
