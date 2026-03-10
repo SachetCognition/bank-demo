@@ -6,6 +6,6 @@ FROM --platform=linux/amd64 node:22-alpine
 WORKDIR /bankapp
 EXPOSE 3000
 COPY package.json package-lock.json ./
-RUN npm install --silent
+RUN npm install --legacy-peer-deps --silent
 COPY . ./
 CMD ["npm", "run", "ui"]
