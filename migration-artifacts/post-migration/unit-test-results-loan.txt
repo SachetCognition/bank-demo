@@ -1,0 +1,6 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.8, pytest-9.0.2, pluggy-1.6.0
+rootdir: /home/ubuntu/repos/bank-demo/loan
+collected 0 items
+
+============================ no tests ran in 0.00s =============================

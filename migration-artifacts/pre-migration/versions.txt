@@ -1,0 +1,58 @@
+Pre-Migration Version Baseline
+==============================
+Captured: $(date -u)
+
+Runtime Versions:
+- Node.js: $(node -v)
+- npm: $(npm -v)
+- Python: $(python3 --version 2>&1)
+
+UI (ui/package.json):
+- react: ^18.2.0
+- react-dom: ^18.2.0
+- vite: ^4.3.2
+- @vitejs/plugin-react: ^4.0.0
+- @reduxjs/toolkit: ^1.9.5
+- react-redux: ^8.0.5
+- react-router-dom: ^6.11.0
+- eslint: ^8.38.0
+
+Customer Auth (customer-auth/package.json):
+- express: ^4.18.2
+- mongoose: ^7.1.0
+- jsonwebtoken: ^9.0.0
+- bcryptjs: ^2.4.3
+- nodemon: ^2.0.22
+
+ATM Locator (atm-locator/package.json):
+- express: ^4.18.2
+- mongoose: ^7.2.4
+- swagger-ui-express: ^5.0.0
+- nodemon: ^2.0.22
+
+Python Services (accounts, transactions, loan, dashboard):
+- Flask: unpinned
+- Flask-Cors: unpinned
+- grpcio: unpinned
+- grpcio-tools: unpinned
+- pymongo: unpinned
+- pytest: unpinned
+- requests: unpinned
+- dotmap: unpinned
+- python-dotenv: unpinned
+
+Docker Base Images:
+- ui: node:18-alpine
+- customer-auth: node:14
+- atm-locator: node:14
+- accounts: python (latest)
+- dashboard: python (latest)
+- loan: python (latest)
+- transactions: python (latest)
+
+CI (build_and_push_images.yml):
+- actions/checkout@v3
+- docker/login-action@v2
+- docker/setup-qemu-action@v2
+- docker/setup-buildx-action@v2
+- docker/build-push-action@v3.3.0

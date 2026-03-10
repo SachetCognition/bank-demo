@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-FROM --platform=linux/amd64 python
+FROM --platform=linux/amd64 python:3.12-slim
 
 RUN mkdir /service
 COPY protobufs/ /service/protobufs/
