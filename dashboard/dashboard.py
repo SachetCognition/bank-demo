@@ -9,7 +9,7 @@ import json
 # from google.protobuf.json_format import MessageToDict
 from flask_cors import CORS
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect
@@ -646,6 +646,15 @@ def _proxy_headers():
     return headers
 
 
+def _proxy_response(backend_resp):
+    """Create a Flask response that forwards Set-Cookie headers from backend."""
+    resp = make_response(json.dumps(backend_resp.json()))
+    resp.headers['Content-Type'] = 'application/json'
+    for cookie_header in backend_resp.headers.getlist('Set-Cookie'):
+        resp.headers.add('Set-Cookie', cookie_header)
+    return resp
+
+
 @app.route("/api/users", methods=["POST"])
 @csrf.exempt
 def register_user():
@@ -656,15 +665,15 @@ def register_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users"
     )
 
-    user_data = flask_client_requests.post(
+    backend_resp = flask_client_requests.post(
         f"http://{customer_auth_host}:8000/api/users", json=request.json,
         headers=_proxy_headers()
-    ).json()
+    )
     logging.debug(
-        f"=========================> response from {customer_auth_host}:8000/api/users: {user_data}"
+        f"=========================> response from {customer_auth_host}:8000/api/users: {backend_resp.json()}"
     )
 
-    return json.dumps(user_data)
+    return _proxy_response(backend_resp)
 
 
 @app.route("/api/users/auth", methods=["POST"])
@@ -677,15 +686,15 @@ def login_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/auth"
     )
 
-    user_data = flask_client_requests.post(
+    backend_resp = flask_client_requests.post(
         f"http://{customer_auth_host}:8000/api/users/auth", json=request.json,
         headers=_proxy_headers()
-    ).json()
+    )
     logging.debug(
-        f"=========================> response from {customer_auth_host}:8000/api/users/auth: {user_data}"
+        f"=========================> response from {customer_auth_host}:8000/api/users/auth: {backend_resp.json()}"
     )
 
-    return json.dumps(user_data)
+    return _proxy_response(backend_resp)
 
 
 @app.route("/api/users/logout", methods=["POST"])
@@ -698,15 +707,15 @@ def logout_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/logout"
     )
 
-    user_data = flask_client_requests.post(
+    backend_resp = flask_client_requests.post(
         f"http://{customer_auth_host}:8000/api/users/logout", json=request.json,
         headers=_proxy_headers()
-    ).json()
+    )
     logging.debug(
-        f"=========================> response from {customer_auth_host}:8000/api/users/logout: {user_data}"
+        f"=========================> response from {customer_auth_host}:8000/api/users/logout: {backend_resp.json()}"
     )
 
-    return json.dumps(user_data)
+    return _proxy_response(backend_resp)
 
 
 @app.route("/api/users/profile", methods=["GET", "PUT"])
@@ -722,24 +731,24 @@ def profile_user():
     proxy_headers = _proxy_headers()
 
     if request.method == "GET":
-        user_data = flask_client_requests.get(
+        backend_resp = flask_client_requests.get(
             f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
             headers=proxy_headers
-        ).json()
-        logging.debug(
-            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
         )
+        logging.debug(
+            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {backend_resp.json()}"
+        )
+        return _proxy_response(backend_resp)
 
     if request.method == "PUT":
-        user_data = flask_client_requests.put(
+        backend_resp = flask_client_requests.put(
             f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
             headers=proxy_headers
-        ).json()
-        logging.debug(
-            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
         )
-
-    return json.dumps(user_data)
+        logging.debug(
+            f"=========================> response from {customer_auth_host}:8000/api/users/profile: {backend_resp.json()}"
+        )
+        return _proxy_response(backend_resp)
 
 
 @app.route("/api/atm/", methods=["POST"])
