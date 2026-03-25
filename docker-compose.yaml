@@ -9,8 +9,8 @@ services:
       image: mongo
       restart: always
       environment:
-        MONGO_INITDB_ROOT_USERNAME: root
-        MONGO_INITDB_ROOT_PASSWORD: example
+        MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-root}
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-example}
       command: ["--replSet", "rs0", "--bind_ip_all"]
       networks:
       - bankapp-network
@@ -91,6 +91,7 @@ services:
       ACCOUNT_HOST: accounts
       TRANSACTION_HOST: transactions
       LOAN_HOST: loan
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
     
@@ -102,6 +103,8 @@ services:
     hostname: accounts
     image: martian-bank-accounts
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
 
@@ -113,6 +116,8 @@ services:
     hostname: loan
     image: martian-bank-loan
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
 
@@ -124,6 +129,8 @@ services:
     hostname: martian-bank-transactions
     image: martian-bank-transactions
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network 
 

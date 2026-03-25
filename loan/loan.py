@@ -10,6 +10,9 @@ import grpc
 
 import logging
 from flask import Flask, request, jsonify
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from validation import sanitize_mongo_input
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -189,7 +192,7 @@ app = Flask(__name__)
 loan_generic = LoanGeneric()
 @app.route("/loan/request", methods=["POST"])
 def process_loan_request():
-    request_data = request.json
+    request_data = sanitize_mongo_input(request.json)
     logging.debug(f"Request: {request_data}")
     response = loan_generic.ProcessLoanRequest(request_data)
     return jsonify(response)
@@ -198,7 +201,7 @@ def process_loan_request():
 @app.route("/loan/history", methods=["POST"])
 def get_loan_history():
     logging.debug("----------------> Request: /loan/history")
-    d = request.json
+    d = sanitize_mongo_input(request.json)
     logging.debug(f"Request: {d}")
     page = d.get("page", 1) if d else 1
     page_size = d.get("page_size", 20) if d else 20
@@ -218,7 +221,7 @@ def serverGRPC(port):
 
 def serverFlask(port):
     logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)
+    app.run(host='0.0.0.0' ,port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
 
 
 if __name__ == "__main__":

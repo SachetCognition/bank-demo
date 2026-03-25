@@ -10,6 +10,9 @@ import json
 from flask_cors import CORS
 
 from flask import Flask, render_template, request, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 import grpc
 
 from dotenv import load_dotenv
@@ -39,7 +42,7 @@ if db_url is None:
 
 uri = db_url
 
-logging.debug(f"Connecting to MongoDB at {uri}")
+logging.debug("Connecting to MongoDB")
 
 # protocol = os.getenv('SERVICE_PROTOCOL')
 protocol = os.getenv('SERVICE_PROTOCOL', 'http')
@@ -57,7 +60,13 @@ collection = db["accounts"]
 
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
+allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
+CORS(app, resources={r"/*": {"origins": allowed_origins, "supports_credentials": True}})
+limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["100 per minute"])
+csrf = CSRFProtect(app)
+
+from jwt_middleware import require_jwt
 
 
 @app.route("/")
@@ -83,6 +92,9 @@ def render_homepage():
 
 
 @app.route("/account/create", methods=["GET", "POST"])
+@require_jwt
+@limiter.limit("20 per minute")
+@csrf.exempt
 def create_account():
     def __grpc():
         channel = grpc.insecure_channel(host_ip_port)
@@ -145,6 +157,8 @@ def create_account():
 
 
 @app.route("/account/allaccounts", methods=["GET", "POST"])
+@require_jwt
+@csrf.exempt
 def get_all_accounts():
     def __grpc():
         channel = grpc.insecure_channel(host_ip_port)
@@ -196,6 +210,8 @@ def get_all_accounts():
 
 
 @app.route("/account/detail", methods=["GET", "POST"])
+@require_jwt
+@csrf.exempt
 def get_account_details():
     def __grpc():
         logging.debug(" get account details called")
@@ -244,6 +260,9 @@ def get_account_details():
 
 
 @app.route("/transaction/", methods=["GET", "POST"])
+@require_jwt
+@limiter.limit("20 per minute")
+@csrf.exempt
 def transaction_form():
     def __grpc():
         channel = grpc.insecure_channel(host_ip_port)
@@ -296,6 +315,9 @@ def transaction_form():
 
 
 @app.route("/transaction/zelle/", methods=["GET", "POST"])
+@require_jwt
+@limiter.limit("20 per minute")
+@csrf.exempt
 def transaction_zelle():
     def __grpc():
         channel = grpc.insecure_channel(host_ip_port)
@@ -353,6 +375,8 @@ def transaction_zelle():
 
 
 @app.route("/transaction/history", methods=["GET", "POST"])
+@require_jwt
+@csrf.exempt
 def get_all_transactions():
     def __grpc():
         channel = grpc.insecure_channel(host_ip_port)
@@ -399,6 +423,8 @@ def get_all_transactions():
 
 
 @app.route("/transaction/transaction-with-id", methods=["GET", "POST"])
+@require_jwt
+@csrf.exempt
 def GetTransactionByID():
     def __grpc():
         transaction_id = request.form["transaction_id"]  # type: ignore
@@ -443,6 +469,9 @@ def GetTransactionByID():
 
 
 @app.route("/loan/", methods=["GET", "POST"])
+@require_jwt
+@limiter.limit("20 per minute")
+@csrf.exempt
 def loan_form():
     def __getLoanGRPC():
         name = request.form["name"]
@@ -531,6 +560,8 @@ def loan_form():
 
 
 @app.route("/loan/history", methods=["GET", "POST"])
+@require_jwt
+@csrf.exempt
 def loan_history():
     def __grpc():
         # Send the gRPC request to the Loan Microservice
@@ -597,6 +628,7 @@ def loan_history():
 
 
 @app.route("/api/users", methods=["POST"])
+@csrf.exempt
 def register_user():
     logging.debug("=========================> register user called")
 
@@ -616,6 +648,7 @@ def register_user():
 
 
 @app.route("/api/users/auth", methods=["POST"])
+@csrf.exempt
 def login_user():
     logging.debug("=========================> login user called")
 
@@ -635,6 +668,7 @@ def login_user():
 
 
 @app.route("/api/users/logout", methods=["POST"])
+@csrf.exempt
 def logout_user():
     logging.debug("=========================> logout user called")
 
@@ -654,6 +688,7 @@ def logout_user():
 
 
 @app.route("/api/users/profile", methods=["GET", "PUT"])
+@csrf.exempt
 def profile_user():
     logging.debug("=========================> profile user called")
 
@@ -682,6 +717,7 @@ def profile_user():
 
 
 @app.route("/api/atm/", methods=["POST"])
+@csrf.exempt
 def get_atms():
     logging.debug("=========================> get atms called")
 
@@ -720,4 +756,4 @@ def get_specific_atm(id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
