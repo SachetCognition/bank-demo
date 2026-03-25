@@ -460,3 +460,124 @@ More more details please see the [Contribution guidelines for this project](CONT
 
 [BSD 3-Clause License](https://opensource.org/license/bsd-3-clause/)
 
+---
+
+## Security Features
+
+### JWT Authentication
+All API endpoints that handle sensitive data are protected with JWT (JSON Web Token) authentication.
+- Tokens are issued on login and stored as httpOnly cookies
+- Token expiry: 30 days
+- Protected endpoints require valid JWT in cookie or Authorization header
+
+### Two-Factor Authentication (2FA)
+PSD2-compliant Strong Customer Authentication (SCA) with TOTP:
+- `POST /api/users/2fa/setup` — Generate TOTP secret and QR code URL
+- `POST /api/users/2fa/verify` — Verify TOTP code and enable 2FA
+- Login flow requires TOTP code when 2FA is enabled
+
+### Rate Limiting
+- Login: 5 requests/minute
+- Registration: 20 requests/minute
+- General API: 100 requests/minute
+- Financial endpoints: Configurable limits via flask-limiter
+
+### Input Validation
+- Email format validation on all endpoints
+- Password strength requirements (min 8 chars, 1 uppercase, 1 number)
+- Amount validation (must be positive)
+- Account number format validation
+- NoSQL injection prevention on all MongoDB queries
+
+### CORS & Security Headers
+- Configurable CORS origins via `CORS_ORIGINS` environment variable
+- Security headers: X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, CSP, HSTS, Referrer-Policy
+
+### CSRF Protection
+- Custom CSRF token generation for Node.js services
+- Flask-WTF CSRF protection for Python services
+
+## GDPR Compliance
+
+### Data Export
+`GET /api/users/data-export` — Download all personal data as JSON (requires authentication)
+
+### Data Erasure (Right to be Forgotten)
+`DELETE /api/users/data-erasure` — Anonymize personal data while retaining financial records per regulatory requirements
+
+### Audit Logging
+All financial operations are logged to an immutable audit trail:
+- Account creation, modifications
+- All transfers and transactions
+- Loan applications and approvals
+- Login attempts (success/failure)
+- Data exports and erasures
+
+### AML Transaction Monitoring
+Automated monitoring flags:
+- Transactions exceeding 10,000 EUR
+- More than 5 transactions per hour from same account
+- Self-transfers
+
+### Transaction Limits
+- Per-transaction limit: 25,000 EUR (default)
+- Daily limit: 50,000 EUR (default)
+- Configurable per account via `transaction_limits` collection
+
+## Running Tests
+
+### Prerequisites
+- Docker and Docker Compose
+- Node.js 18+
+- Python 3.11+
+
+### Quick Test Run
+```bash
+chmod +x run-tests.sh
+./run-tests.sh
+```
+
+### Unit Tests
+```bash
+cd tests/unit
+pip install pytest pytest-html
+python -m pytest . -v --html=../../artifacts/unit-report.html
+```
+
+### Integration Tests
+```bash
+cd tests/integration
+pip install pytest pytest-html requests
+python -m pytest . -v --html=../../artifacts/integration-report.html
+```
+
+### E2E Tests (Playwright)
+```bash
+cd tests/e2e
+npm install
+npx playwright install chromium
+npx playwright test
+```
+
+### Performance Tests (Locust)
+```bash
+cd performance_locust
+pip install locust faker
+locust -f locustfile.py --host=http://localhost:5000
+```
+
+## Environment Variables
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `MONGO_USERNAME` | MongoDB root username | `root` | Yes |
+| `MONGO_PASSWORD` | MongoDB root password | `example` | Yes |
+| `JWT_SECRET` | JWT signing secret | - | Yes |
+| `CORS_ORIGINS` | Comma-separated allowed origins | `http://localhost:3000,http://localhost:8080` | No |
+| `FLASK_DEBUG` | Enable Flask debug mode | `false` | No |
+| `ENCRYPTION_KEY` | AES encryption key for sensitive data | - | Yes (for accounts) |
+| `GRPC_MAX_WORKERS` | gRPC thread pool size | `50` | No |
+| `DB_URL` | MongoDB connection string | - | Yes (for Python services) |
+| `DATABASE_HOST` | MongoDB host for Node.js services | - | Yes (for Node.js services) |
+| `SERVICE_PROTOCOL` | Communication protocol (http/grpc) | `http` | No |
+
