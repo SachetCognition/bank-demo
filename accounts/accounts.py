@@ -56,7 +56,11 @@ class AccountsGeneric:
         if account:
             account_data = {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
             if "govt_id_number" in account:
-                account_data["govt_id_number"] = mask_value(decrypt_value(account["govt_id_number"]))
+                try:
+                    decrypted = decrypt_value(account["govt_id_number"])
+                except Exception:
+                    decrypted = account["govt_id_number"]  # legacy plaintext
+                account_data["govt_id_number"] = mask_value(decrypted)
             return account_data
     
 
@@ -139,7 +143,11 @@ class AccountsGeneric:
                 ]
             }
             if "govt_id_number" in acc:
-                acc["govt_id_number"] = mask_value(decrypt_value(acc["govt_id_number"]))
+                try:
+                    decrypted = decrypt_value(acc["govt_id_number"])
+                except Exception:
+                    decrypted = acc["govt_id_number"]  # legacy plaintext
+                acc["govt_id_number"] = mask_value(decrypted)
             account_list.append(acc)
 
         return account_list

@@ -239,7 +239,7 @@ const setup2FA = asyncHandler(async (req, res) => {
       message: "Scan the QR code with your authenticator app, then verify with /api/users/2fa/verify",
     });
   } catch (error) {
-    res.status(500);
+    res.status(res.statusCode === 200 ? 500 : res.statusCode);
     res.json({ message: error.message });
   }
 });

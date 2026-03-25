@@ -66,7 +66,7 @@ def check_transaction(sender_account_number, receiver_account_number, amount, re
     # Rule 2: Flag more than 5 transactions in 1 hour from same account
     _, trans_col = _get_collections()
     if trans_col is not None:
-        one_hour_ago = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+        one_hour_ago = datetime.datetime.now() - datetime.timedelta(hours=1)
         recent_count = trans_col.count_documents({
             "sender": sender_account_number,
             "time_stamp": {"$gte": one_hour_ago}

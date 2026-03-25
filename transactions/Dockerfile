@@ -7,6 +7,7 @@ FROM --platform=linux/amd64 python
 RUN mkdir /service
 COPY protobufs/ /service/protobufs/
 COPY transactions/ /service/transactions/
+COPY audit/ /service/audit/
 WORKDIR /service/transactions
 RUN python -m pip install --upgrade pip
 RUN python -m pip install -r requirements.txt
