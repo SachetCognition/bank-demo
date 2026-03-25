@@ -193,11 +193,6 @@ class TransactionGeneric:
         return result
 
     def __doTransaction(self, sender, receiver, amount, reason=""):
-        # Check transaction limits
-        allowed, limit_message = self.__check_limits(sender["account_number"], amount)
-        if not allowed:
-            return {"approved": False, "message": limit_message}
-
         if sender["balance"] < amount:
             return {"approved": False, "message": "Insufficient Balance"}
 
