@@ -22,6 +22,10 @@ from pymongo.mongo_client import MongoClient
 from dotenv import load_dotenv
 load_dotenv()
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from audit.audit_logger import log_audit
+
 
 # db_host = os.getenv("DATABASE_HOST", "localhost")
 db_url = os.getenv("DB_URL")
@@ -88,6 +92,7 @@ class LoanGeneric:
         loan_request["status"] = "Approved" if result else "Declined"
 
         collection_loans.insert_one(loan_request)
+        log_audit("loan_application", email, {"account_number": account_number, "loan_amount": loan_amount, "loan_type": loan_type, "status": loan_request["status"]}, service_name="loan")
 
         response = {"approved": result, "message": message}
         logging.debug(f"Account: {account_number}")

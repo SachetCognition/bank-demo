@@ -26,6 +26,11 @@ from google.protobuf.json_format import MessageToDict
 from dotenv import load_dotenv
 load_dotenv()
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from audit.audit_logger import log_audit
+from aml_monitor import check_transaction
+
 import logging
 
 # set logging to debug
@@ -57,6 +62,10 @@ client = MongoClient(uri)
 db = client["bank"]
 collection_accounts = db["accounts"]
 collection_transactions = db["transactions"]
+collection_limits = db["transaction_limits"]
+
+DEFAULT_DAILY_LIMIT = 50000  # EUR
+DEFAULT_PER_TRANSACTION_LIMIT = 25000  # EUR
 
 
 class TransactionGeneric:
@@ -133,6 +142,35 @@ class TransactionGeneric:
 
         return self.__transfer(sender_account, receiver_account, amount, reason)
 
+    def __check_limits(self, sender_account_number, amount):
+        """Check transaction limits. Returns (allowed, message)."""
+        # Check per-transaction limit
+        limit_doc = collection_limits.find_one({"account_number": sender_account_number})
+        per_tx_limit = DEFAULT_PER_TRANSACTION_LIMIT
+        daily_limit = DEFAULT_DAILY_LIMIT
+
+        if limit_doc:
+            per_tx_limit = limit_doc.get("per_transaction_limit", DEFAULT_PER_TRANSACTION_LIMIT)
+            daily_limit = limit_doc.get("daily_limit", DEFAULT_DAILY_LIMIT)
+
+        if amount > per_tx_limit:
+            return False, f"Amount {amount} exceeds per-transaction limit of {per_tx_limit}"
+
+        # Check daily limit
+        today_start = datetime.datetime.combine(datetime.date.today(), datetime.time.min)
+        daily_total = 0
+        daily_transactions = collection_transactions.find({
+            "sender": sender_account_number,
+            "time_stamp": {"$gte": today_start}
+        })
+        for t in daily_transactions:
+            daily_total += t.get("amount", 0)
+
+        if daily_total + amount > daily_limit:
+            return False, f"Daily limit of {daily_limit} would be exceeded. Today's total: {daily_total}"
+
+        return True, "OK"
+
     def __transfer(self, sender_account, receiver_account, amount, reason):
         # if sender_account is not None or receiver_account is not None:
 
@@ -142,6 +180,10 @@ class TransactionGeneric:
         if receiver_account is None:
             return {"approved": False, "message": "Receiver Account Not Found."}
 
+        # Check transaction limits before processing
+        allowed, limit_message = self.__check_limits(sender_account["account_number"], amount)
+        if not allowed:
+            return {"approved": False, "message": limit_message}
 
         result = self.__doTransaction(
             sender_account, receiver_account, amount, reason=reason
@@ -179,6 +221,12 @@ class TransactionGeneric:
                 "time_stamp": datetime.datetime.now(),
             }
         )
+
+        # Audit logging
+        log_audit("transfer", sender["email_id"] if "email_id" in sender else "unknown", {"sender": sender["account_number"], "receiver": receiver["account_number"], "amount": amount, "reason": reason}, service_name="transactions")
+
+        # AML monitoring
+        check_transaction(sender["account_number"], receiver["account_number"], amount, reason)
 
         return {"approved": True, "message": "Transaction is Successful."}
 
