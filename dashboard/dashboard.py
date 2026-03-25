@@ -648,7 +648,7 @@ def register_user():
     resp = app.make_response(json.dumps(user_data))
     resp.headers["Content-Type"] = "application/json"
     # Forward Set-Cookie from customer-auth so the JWT cookie reaches the browser
-    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+    for cookie_header in upstream_resp.raw.headers.getlist("Set-Cookie"):
         resp.headers.add("Set-Cookie", cookie_header)
     return resp
 
@@ -674,7 +674,7 @@ def login_user():
     resp = app.make_response(json.dumps(user_data))
     resp.headers["Content-Type"] = "application/json"
     # Forward Set-Cookie from customer-auth so the JWT cookie reaches the browser
-    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+    for cookie_header in upstream_resp.raw.headers.getlist("Set-Cookie"):
         resp.headers.add("Set-Cookie", cookie_header)
     return resp
 
@@ -707,7 +707,7 @@ def logout_user():
     resp = app.make_response(json.dumps(user_data))
     resp.headers["Content-Type"] = "application/json"
     # Forward Set-Cookie to clear the JWT cookie in the browser
-    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+    for cookie_header in upstream_resp.raw.headers.getlist("Set-Cookie"):
         resp.headers.add("Set-Cookie", cookie_header)
     return resp
 
