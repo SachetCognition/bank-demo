@@ -30,6 +30,9 @@ connectDB();
 const port = process.env.PORT || 8000;
 const app = express();
 
+// Trust first proxy (nginx) so req.ip reflects the real client IP
+app.set('trust proxy', 1);
+
 // mounting middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

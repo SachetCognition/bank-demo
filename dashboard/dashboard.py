@@ -627,6 +627,16 @@ def loan_history():
 #################### Proxy Routes for API Clarity ####################
 
 
+def _proxy_headers():
+    """Build headers to forward JWT credentials to backend services."""
+    headers = {}
+    if request.cookies.get('jwt'):
+        headers['Cookie'] = f'jwt={request.cookies.get("jwt")}'
+    if request.headers.get('Authorization'):
+        headers['Authorization'] = request.headers.get('Authorization')
+    return headers
+
+
 @app.route("/api/users", methods=["POST"])
 @csrf.exempt
 def register_user():
@@ -697,9 +707,12 @@ def profile_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/profile"
     )
 
+    proxy_headers = _proxy_headers()
+
     if request.method == "GET":
         user_data = flask_client_requests.get(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
+            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
+            headers=proxy_headers
         ).json()
         logging.debug(
             f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
@@ -707,7 +720,8 @@ def profile_user():
 
     if request.method == "PUT":
         user_data = flask_client_requests.put(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
+            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
+            headers=proxy_headers
         ).json()
         logging.debug(
             f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"

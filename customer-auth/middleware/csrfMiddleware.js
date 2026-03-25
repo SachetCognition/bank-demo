@@ -1,11 +1,15 @@
 import crypto from "crypto";
 
-const csrfTokens = new Map();
-
 const generateCsrfToken = (req, res) => {
   const token = crypto.randomBytes(32).toString("hex");
-  const sessionId = req.cookies?.jwt || req.ip;
-  csrfTokens.set(sessionId, { token, expires: Date.now() + 3600000 }); // 1 hour expiry
+  // Double-submit cookie pattern: store token in a non-httpOnly cookie
+  // and return it in the response body. Client sends it back as a header.
+  res.cookie("csrf_token", token, {
+    httpOnly: false,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 3600000, // 1 hour
+  });
   res.json({ csrfToken: token });
 };
 
@@ -15,27 +19,15 @@ const validateCsrf = (req, res, next) => {
     return next();
   }
 
-  const csrfToken =
-    req.headers["x-csrf-token"] || req.body?._csrf;
-  const sessionId = req.cookies?.jwt || req.ip;
-  const stored = csrfTokens.get(sessionId);
+  const headerToken = req.headers["x-csrf-token"] || req.body?._csrf;
+  const cookieToken = req.cookies?.csrf_token;
 
-  if (!stored || stored.token !== csrfToken || stored.expires < Date.now()) {
+  if (!headerToken || !cookieToken || headerToken !== cookieToken) {
     res.status(403);
     return res.json({ message: "Invalid or missing CSRF token" });
   }
 
   next();
 };
-
-// Cleanup expired tokens periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of csrfTokens.entries()) {
-    if (value.expires < now) {
-      csrfTokens.delete(key);
-    }
-  }
-}, 3600000); // Cleanup every hour
 
 export { generateCsrfToken, validateCsrf };
