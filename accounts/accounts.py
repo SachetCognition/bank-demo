@@ -19,6 +19,11 @@ logging.basicConfig(level=logging.DEBUG)
 from dotenv import load_dotenv
 load_dotenv()
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from audit.audit_logger import log_audit
+from crypto_utils import encrypt_value, decrypt_value, mask_value
+
 # db_host = os.getenv("DATABASE_HOST", "localhost")
 db_url = os.getenv("DB_URL")
 if db_url is None:
@@ -49,7 +54,10 @@ class AccountsGeneric:
       
 
         if account:
-            return  {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
+            account_data = {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
+            if "govt_id_number" in account:
+                account_data["govt_id_number"] = mask_value(decrypt_value(account["govt_id_number"]))
+            return account_data
     
 
         return {}
@@ -87,8 +95,12 @@ class AccountsGeneric:
         ] = f"IBAN{random.randint(1000000000000000, 9999999999999999)}"
         # timestamp  the account creation
         account["created_at"] = datetime.datetime.now()
+        # Encrypt govt_id_number before storing
+        account["govt_id_number"] = encrypt_value(request.govt_id_number)
+
         # insert the account into the list of accounts
         collection.insert_one(account)
+        log_audit("account_creation", request.email_id, {"account_type": request.account_type, "account_number": account["account_number"]}, service_name="accounts")
         return True  # CreateAccountResponse(result=True)
 
     def getAccounts(self, request):
@@ -126,6 +138,8 @@ class AccountsGeneric:
                     "currency",
                 ]
             }
+            if "govt_id_number" in acc:
+                acc["govt_id_number"] = mask_value(decrypt_value(acc["govt_id_number"]))
             account_list.append(acc)
 
         return account_list
