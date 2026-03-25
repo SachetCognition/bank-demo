@@ -11,6 +11,10 @@ from flask import Flask, request, jsonify
 
 from dotmap import DotMap
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from validation import sanitize_mongo_input
+
 # Configure the logging settings
 import logging
 
@@ -288,7 +292,7 @@ transaction_generic = TransactionGeneric()
 
 @app.route("/transfer", methods=["POST"])
 def sendMoney():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.SendMoney(data)
     return jsonify(result)
@@ -296,7 +300,7 @@ def sendMoney():
 @app.route("/zelle", methods=["POST"])
 def zelle():
     logging.debug(" Zelle API called")
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.Zelle(data)
     return jsonify(result)
@@ -304,14 +308,14 @@ def zelle():
 @app.route("/transaction-with-id", methods=["POST"])
 def getTransactionByID():
     logging.debug(" Get Transaction By ID API called")
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.GetTransactionByID(data)
     return jsonify(result)
 
 @app.route("/transaction-history", methods=["POST"])
 def getTransactionsHistory():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.GetTransactionsHistory(data)
     return jsonify(result)
@@ -320,7 +324,7 @@ def getTransactionsHistory():
 
 def serverFlask(port):
     logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)
+    app.run(host='0.0.0.0' ,port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
 
 
 def serverGRPC(port):

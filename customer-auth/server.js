@@ -11,6 +11,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
 import colors from 'colors';
 
 import { swaggerDocs } from './utils/swagger.js';
@@ -29,12 +30,37 @@ connectDB();
 const port = process.env.PORT || 8000;
 const app = express();
 
+// Trust first proxy (nginx) so req.ip reflects the real client IP
+app.set('trust proxy', 1);
+
 // mounting middlewares
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors({credentials: true, origin: true}));
+const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:8080'];
+app.use(cors({credentials: true, origin: allowedOrigins}));
 app.use(cookieParser());
 app.use(morgan('dev'));
+
+// Rate limiters
+const generalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { message: 'Too many requests, please try again later.' },
+});
+const loginLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { message: 'Too many login attempts, please try again later.' },
+});
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  message: { message: 'Too many registration attempts, please try again later.' },
+});
+
+app.use(generalLimiter);
+app.use('/api/users/auth', loginLimiter);
+app.post('/api/users', registrationLimiter);
 
 // mounting routes
 app.use('/api/users', userRoutes);
