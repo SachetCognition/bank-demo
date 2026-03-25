@@ -13,6 +13,9 @@ import logging
 from dotmap import DotMap
 from pymongo.mongo_client import MongoClient
 from flask import Flask, request, jsonify
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from validation import sanitize_mongo_input
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
@@ -180,7 +183,7 @@ app = Flask(__name__)
 accounts_generic = AccountsGeneric()
 @app.route("/account-detail", methods=["POST"])
 def getAccountDetails():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     # account_number = request.json["account_number"]
     account = accounts_generic.getAccountDetails(data)
@@ -188,14 +191,14 @@ def getAccountDetails():
 
 @app.route("/create-account", methods=["POST"])
 def createAccount():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = accounts_generic.createAccount(data)
     return jsonify(result)
 
 @app.route("/get-all-accounts", methods=["POST"])
 def getAccounts():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     accounts = accounts_generic.getAccounts(data)
     return jsonify(accounts)
@@ -204,7 +207,7 @@ def getAccounts():
 
 def serverFlask(port):
     logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)    
+    app.run(host='0.0.0.0' ,port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')    
 
 
 def serverGRPC(port):
