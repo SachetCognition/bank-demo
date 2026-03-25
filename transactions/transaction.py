@@ -102,29 +102,19 @@ class TransactionGeneric:
         page = max(1, page)
         skip = (page - 1) * page_size
 
-        # find based on account number only based on sender
-        transactions_credit = collection_transactions.find({"sender": account_number}).skip(skip).limit(page_size)
-        transactions_debit = collection_transactions.find({"receiver": account_number}).skip(skip).limit(page_size)
+        transactions = collection_transactions.find(
+            {"$or": [{"sender": account_number}, {"receiver": account_number}]}
+        ).skip(skip).limit(page_size)
 
         transactions_list = []
-        for t in transactions_credit:
+        for t in transactions:
+            t_type = "credit" if t["sender"] == account_number else "debit"
             temp_t = {
                 "account_number": t["receiver"],
                 "amount": t["amount"],
                 "reason": t["reason"],
                 "time_stamp": f"{t['time_stamp']}",
-                "type": "credit",
-                "transaction_id": str(t["_id"]),
-            }
-            transactions_list.append(temp_t)
-
-        for t in transactions_debit:
-            temp_t = {
-                "account_number": t["receiver"],
-                "amount": t["amount"],
-                "reason": t["reason"],
-                "time_stamp": f"{t['time_stamp']}",
-                "type": "credit",
+                "type": t_type,
                 "transaction_id": str(t["_id"]),
             }
             transactions_list.append(temp_t)
@@ -240,7 +230,7 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
             )
 
     def getTransactionsHistory(self, request, context):
-        results = self.transaction.GetTransactionsHistory(request)
+        results = self.transaction.GetTransactionsHistory(request, page=1, page_size=10000)
         transactions_list = []
         for t in results:
             temp_t = Transaction(

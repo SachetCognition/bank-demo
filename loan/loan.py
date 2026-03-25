@@ -175,7 +175,7 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
         req = {'email': email}
         loan_history = []
 
-        loans = self.loan.getLoanHistory(req)
+        loans = self.loan.getLoanHistory(req, page=1, page_size=10000)
 
         for l in loans:
             loan_history.append(Loan(name=l['name'], email=l['email'], account_type=l['account_type'], account_number=l['account_number'], govt_id_type=l['govt_id_type'], govt_id_number=l['govt_id_number'], loan_type=l['loan_type'], loan_amount=l['loan_amount'], interest_rate=l['interest_rate'], time_period=l['time_period'], status=l['status'], timestamp=f"{l['timestamp']}"))

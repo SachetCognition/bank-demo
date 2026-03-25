@@ -151,7 +151,7 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
     def getAccounts(self, request, context):
         # return self.accounts.getAccounts(request)
-        accounts = self.accounts.getAccounts(request)
+        accounts = self.accounts.getAccounts(request, page=1, page_size=10000)
         account_list = []
         for account in accounts:
             account_list.append(
