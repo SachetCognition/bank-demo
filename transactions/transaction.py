@@ -58,6 +58,12 @@ db = client["bank"]
 collection_accounts = db["accounts"]
 collection_transactions = db["transactions"]
 
+collection_transactions.create_index("sender")
+collection_transactions.create_index("receiver")
+collection_transactions.create_index("time_stamp")
+collection_accounts.create_index("account_number", unique=True)
+collection_accounts.create_index("email_id")
+
 
 class TransactionGeneric:
     def SendMoney(self, request):
@@ -90,13 +96,15 @@ class TransactionGeneric:
             "transaction_id": str(transaction["_id"]),
         }
 
-    def GetTransactionsHistory(self, request):
+    def GetTransactionsHistory(self, request, page=1, page_size=20):
         account_number = request.account_number
-        # logging.debug(f"Account Number: {account_number}")
+        page_size = min(max(1, page_size), 100)
+        page = max(1, page)
+        skip = (page - 1) * page_size
 
         # find based on account number only based on sender
-        transactions_credit = collection_transactions.find({"sender": account_number})
-        transactions_debit = collection_transactions.find({"receiver": account_number})
+        transactions_credit = collection_transactions.find({"sender": account_number}).skip(skip).limit(page_size)
+        transactions_debit = collection_transactions.find({"receiver": account_number}).skip(skip).limit(page_size)
 
         transactions_list = []
         for t in transactions_credit:
@@ -154,82 +162,51 @@ class TransactionGeneric:
         if sender["balance"] < amount:
             return {"approved": False, "message": "Insufficient Balance"}
 
-        sender["balance"] -= amount
-        receiver["balance"] += amount
+        with client.start_session() as session:
+            with session.start_transaction():
+                result = collection_accounts.update_one(
+                    {"account_number": sender["account_number"], "balance": {"$gte": amount}},
+                    {"$inc": {"balance": -amount}},
+                    session=session
+                )
+                if result.modified_count == 0:
+                    return {"approved": False, "message": "Insufficient Balance"}
 
-        # update sender account
-        collection_accounts.update_one(
-            {"account_number": sender["account_number"]},
-            {"$set": {"balance": sender["balance"]}},
-        )
-
-        # update receiver account
-        collection_accounts.update_one(
-            {"account_number": receiver["account_number"]},
-            {"$set": {"balance": receiver["balance"]}},
-        )
-
-        # add transaction
-        collection_transactions.insert_one(
-            {
-                "sender": sender["account_number"],
-                "receiver": receiver["account_number"],
-                "amount": amount,
-                "reason": reason,
-                "time_stamp": datetime.datetime.now(),
-            }
-        )
+                collection_accounts.update_one(
+                    {"account_number": receiver["account_number"]},
+                    {"$inc": {"balance": amount}},
+                    session=session
+                )
+                collection_transactions.insert_one(
+                    {
+                        "sender": sender["account_number"],
+                        "receiver": receiver["account_number"],
+                        "amount": amount,
+                        "reason": reason,
+                        "time_stamp": datetime.datetime.now(),
+                    },
+                    session=session
+                )
 
         return {"approved": True, "message": "Transaction is Successful."}
 
     def __getAccountwithEmail(self, email):
         logging.debug(f"Email: {email}")
-        # log the document with the email
-        logging.debug(
-            f"Document with email: {collection_accounts.count_documents({'email_id': email, 'account_type': 'Checking'})}"
-        )
-
-        document = None
-
-        if (
-            collection_accounts.count_documents(
-                {"email_id": email, "account_type": "Checking"}
-            )
-            == 1
-        ):
-            checking_account = collection_accounts.find(
-                {"email_id": email, "account_type": "Checking"}
-            )
-            document = checking_account[0]
+        # Try checking account first
+        document = collection_accounts.find_one({"email_id": email, "account_type": "Checking"})
+        if document:
             logging.debug(f"Checking Account: {document}")
             return document
-        else:
-            if (
-                collection_accounts.count_documents(
-                    {"email_id": email, "account_type": "Savings"}
-                )
-                == 1
-            ):
-                saving_account = collection_accounts.find(
-                    {"email_id": email, "account_type": "Savings"}
-                )
-                document = saving_account[0]
-                logging.debug(f"Savings Account: {document}")
-                return document
-            # logging.debug(f"Savings Account: {document}")
+        # Fall back to savings
+        document = collection_accounts.find_one({"email_id": email, "account_type": "Savings"})
+        if document:
+            logging.debug(f"Savings Account: {document}")
+            return document
         logging.debug("No Account Found")
-        return document
+        return None
 
     def __getAccount(self, account_num):
-        r = None
-        accounts = collection_accounts.find()
-        # logging.debug(f"Accounts: {list(accounts)}")
-        for acc in accounts:
-            if acc["account_number"] == account_num:
-                r = acc
-                break
-        # logging.debug(f"Account {r}")
-        return r
+        return collection_accounts.find_one({"account_number": account_num})
 
 
 class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
@@ -312,8 +289,10 @@ def getTransactionByID():
 @app.route("/transaction-history", methods=["POST"])
 def getTransactionsHistory():
     data = request.json
+    page = data.get("page", 1) if data else 1
+    page_size = data.get("page_size", 20) if data else 20
     data = DotMap(data)
-    result = transaction_generic.GetTransactionsHistory(data)
+    result = transaction_generic.GetTransactionsHistory(data, page=page, page_size=page_size)
     return jsonify(result)
 
 
@@ -324,7 +303,7 @@ def serverFlask(port):
 
 
 def serverGRPC(port):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=int(os.getenv('GRPC_MAX_WORKERS', '50'))))
     transaction_pb2_grpc.add_TransactionServiceServicer_to_server(
         TransactionService(), server
     )

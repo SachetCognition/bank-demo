@@ -40,6 +40,10 @@ client = MongoClient(uri)
 db = client["bank"]
 collection = db["accounts"]
 
+collection.create_index("email_id")
+collection.create_index("account_number", unique=True)
+collection.create_index([("email_id", 1), ("account_type", 1)])
+
 
 class AccountsGeneric:
     def getAccountDetails(self, request):
@@ -91,25 +95,15 @@ class AccountsGeneric:
         collection.insert_one(account)
         return True  # CreateAccountResponse(result=True)
 
-    def getAccounts(self, request):
+    def getAccounts(self, request, page=1, page_size=20):
         email_id = request.email_id
-        accounts = collection.find({"email_id": email_id})
+        page_size = min(max(1, page_size), 100)
+        page = max(1, page)
+        skip = (page - 1) * page_size
+
+        accounts = collection.find({"email_id": email_id}).skip(skip).limit(page_size)
         account_list = []
         for account in accounts:
-            # logging.debug(account["balance"])
-            # account_list.append(
-            #     Account(
-            #         account_number=account["account_number"],
-            #         email_id=account["email_id"],
-            #         account_type=account["account_type"],
-            #         address=account["address"],
-            #         govt_id_number=account["govt_id_number"],
-            #         government_id_type=account["government_id_type"],
-            #         name=account["name"],
-            #         balance=account["balance"],
-            #         currency=account["currency"],
-            #     )
-            # )
             acc = {
                 k: v
                 for k, v in account.items()
@@ -196,8 +190,10 @@ def createAccount():
 @app.route("/get-all-accounts", methods=["POST"])
 def getAccounts():
     data = request.json
+    page = data.get("page", 1) if data else 1
+    page_size = data.get("page_size", 20) if data else 20
     data = DotMap(data)
-    accounts = accounts_generic.getAccounts(data)
+    accounts = accounts_generic.getAccounts(data, page=page, page_size=page_size)
     return jsonify(accounts)
 
 
@@ -209,7 +205,7 @@ def serverFlask(port):
 
 def serverGRPC(port):
     # recommendations_host = os.getenv("RECOMMENDATIONS_HOST", "localhost")
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=int(os.getenv('GRPC_MAX_WORKERS', '50'))))
     accounts_pb2_grpc.add_AccountDetailsServiceServicer_to_server(
         AccountDetailsService(), server
     )
