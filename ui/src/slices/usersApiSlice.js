@@ -12,6 +12,7 @@ const usersUrl = import.meta.env.VITE_USERS_URL || ApiUrls.VITE_USERS_URL;
 // const baseQuery = fetchBaseQuery({ baseUrl: 'http://host.docker.internal:8000/' });
 const baseQuery = fetchBaseQuery({ 
   baseUrl: "",
+  credentials: "include",
 });
 
 export const apiSlice = createApi({

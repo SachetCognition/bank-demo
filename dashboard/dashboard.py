@@ -637,14 +637,20 @@ def register_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users"
     )
 
-    user_data = flask_client_requests.post(
+    upstream_resp = flask_client_requests.post(
         f"http://{customer_auth_host}:8000/api/users", json=request.json
-    ).json()
+    )
+    user_data = upstream_resp.json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users: {user_data}"
     )
 
-    return json.dumps(user_data)
+    resp = app.make_response(json.dumps(user_data))
+    resp.headers["Content-Type"] = "application/json"
+    # Forward Set-Cookie from customer-auth so the JWT cookie reaches the browser
+    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+        resp.headers.add("Set-Cookie", cookie_header)
+    return resp
 
 
 @app.route("/api/users/auth", methods=["POST"])
@@ -657,14 +663,20 @@ def login_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/auth"
     )
 
-    user_data = flask_client_requests.post(
+    upstream_resp = flask_client_requests.post(
         f"http://{customer_auth_host}:8000/api/users/auth", json=request.json
-    ).json()
+    )
+    user_data = upstream_resp.json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users/auth: {user_data}"
     )
 
-    return json.dumps(user_data)
+    resp = app.make_response(json.dumps(user_data))
+    resp.headers["Content-Type"] = "application/json"
+    # Forward Set-Cookie from customer-auth so the JWT cookie reaches the browser
+    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+        resp.headers.add("Set-Cookie", cookie_header)
+    return resp
 
 
 @app.route("/api/users/logout", methods=["POST"])
@@ -677,14 +689,27 @@ def logout_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/logout"
     )
 
-    user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users/logout", json=request.json
-    ).json()
+    # Forward JWT credentials to customer-auth
+    cookies = {"jwt": request.cookies.get("jwt")} if request.cookies.get("jwt") else {}
+    headers = {}
+    if request.headers.get("Authorization"):
+        headers["Authorization"] = request.headers.get("Authorization")
+
+    upstream_resp = flask_client_requests.post(
+        f"http://{customer_auth_host}:8000/api/users/logout", json=request.json,
+        cookies=cookies, headers=headers
+    )
+    user_data = upstream_resp.json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users/logout: {user_data}"
     )
 
-    return json.dumps(user_data)
+    resp = app.make_response(json.dumps(user_data))
+    resp.headers["Content-Type"] = "application/json"
+    # Forward Set-Cookie to clear the JWT cookie in the browser
+    for cookie_header in upstream_resp.headers.getlist("Set-Cookie"):
+        resp.headers.add("Set-Cookie", cookie_header)
+    return resp
 
 
 @app.route("/api/users/profile", methods=["GET", "PUT"])
@@ -697,9 +722,16 @@ def profile_user():
         f"=========================> forwarding to {customer_auth_host}:8000/api/users/profile"
     )
 
+    # Forward JWT credentials to customer-auth
+    cookies = {"jwt": request.cookies.get("jwt")} if request.cookies.get("jwt") else {}
+    headers = {}
+    if request.headers.get("Authorization"):
+        headers["Authorization"] = request.headers.get("Authorization")
+
     if request.method == "GET":
         user_data = flask_client_requests.get(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
+            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
+            cookies=cookies, headers=headers
         ).json()
         logging.debug(
             f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"
@@ -707,7 +739,8 @@ def profile_user():
 
     if request.method == "PUT":
         user_data = flask_client_requests.put(
-            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json
+            f"http://{customer_auth_host}:8000/api/users/profile", json=request.json,
+            cookies=cookies, headers=headers
         ).json()
         logging.debug(
             f"=========================> response from {customer_auth_host}:8000/api/users/profile: {user_data}"

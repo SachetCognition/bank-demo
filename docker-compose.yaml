@@ -91,6 +91,7 @@ services:
       ACCOUNT_HOST: accounts
       TRANSACTION_HOST: transactions
       LOAN_HOST: loan
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
       FLASK_DEBUG: "false"
     networks:
       - bankapp-network
