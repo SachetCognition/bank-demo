@@ -11,8 +11,13 @@ services:
       environment:
         MONGO_INITDB_ROOT_USERNAME: root
         MONGO_INITDB_ROOT_PASSWORD: example
+      command: ["--replSet", "rs0", "--bind_ip_all"]
       networks:
       - bankapp-network
+      healthcheck:
+        test: ["CMD", "mongosh", "--eval", "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }"]
+        interval: 10s
+        start_period: 30s
 
   ui:
     build:

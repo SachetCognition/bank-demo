@@ -37,30 +37,30 @@ const connectDB = async () => {
     process.exit(1);
   }
 
-  console.log(`Seeding database with data from atm_data.json ...`);
+  const count = await ATM.countDocuments();
+  if (count === 0) {
+    console.log(`Seeding database with data from atm_data.json ...`);
 
-  const atmDataFile = join(
-    dirname(fileURLToPath(import.meta.url)),
-    "atm_data.json"
-  );
-  const rawData = fs.readFileSync(atmDataFile);
-  const jsonData = JSON.parse(rawData);
-  const processedData = jsonData.map((item) => ({
-    ...item,
-    _id: new mongoose.Types.ObjectId(item._id.$oid),
-    createdAt: new Date(item.createdAt.$date),
-    updatedAt: new Date(item.updatedAt.$date),
-  }));
-  try {
+    const atmDataFile = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "atm_data.json"
+    );
+    const rawData = fs.readFileSync(atmDataFile);
+    const jsonData = JSON.parse(rawData);
+    const processedData = jsonData.map((item) => ({
+      ...item,
+      _id: new mongoose.Types.ObjectId(item._id.$oid),
+      createdAt: new Date(item.createdAt.$date),
+      updatedAt: new Date(item.updatedAt.$date),
+    }));
     try {
-      await ATM.collection.drop();
+      await ATM.insertMany(processedData);
+      console.log(`Database seeded with ${processedData.length} records.`);
     } catch (error) {
-      console.log(`Error: ${error.message}`.red.bold);
+      console.log(`Error seeding: ${error.message}`.red.bold);
     }
-    await ATM.insertMany(processedData);
-    console.log(`Database seeded with ${processedData.length} records.`);
-  } catch (error) {
-    console.log(`Error: ${error.message}`.red.bold);
+  } else {
+    console.log(`Database already has ${count} ATM records, skipping seed.`);
   }
 };
 

@@ -45,6 +45,12 @@ db = client["bank"]
 collection_accounts = db["accounts"]
 collection_loans = db["loans"]
 
+collection_loans.create_index("email")
+collection_loans.create_index("account_number")
+collection_loans.create_index([("email", 1), ("account_number", 1)])
+collection_accounts.create_index("account_number", unique=True)
+collection_accounts.create_index("email_id")
+
 class LoanGeneric:
     def ProcessLoanRequest(self, request_data):
         name = request_data["name"]
@@ -94,9 +100,17 @@ class LoanGeneric:
         logging.debug(f"Response: {response}")
         return response
 
-    def getLoanHistory(self, request_data):
+    def getLoanHistory(self, request_data, page=1, page_size=20):
         email = request_data["email"]
-        loans = collection_loans.find({"email": email})
+
+        if page_size == 0:
+            # page_size=0 means no pagination (return all results)
+            loans = collection_loans.find({"email": email})
+        else:
+            page_size = min(max(1, page_size), 100)
+            page = max(1, page)
+            skip = (page - 1) * page_size
+            loans = collection_loans.find({"email": email}).skip(skip).limit(page_size)
         loan_history = []
 
         for l in loans:
@@ -120,14 +134,7 @@ class LoanGeneric:
         return loan_history
 
     def __getAccount(self, account_num):
-        r = None
-        accounts = collection_accounts.find()
-        for acc in accounts:
-            if acc["account_number"] == account_num:
-                r = acc
-                break
-        # logging.debug(f"Account {r}")
-        return r
+        return collection_accounts.find_one({"account_number": account_num})
 
     def __approveLoan(self, account, amount):
         if amount < 1:
@@ -172,7 +179,7 @@ class LoanService(loan_pb2_grpc.LoanServiceServicer):
         req = {'email': email}
         loan_history = []
 
-        loans = self.loan.getLoanHistory(req)
+        loans = self.loan.getLoanHistory(req, page_size=0)
 
         for l in loans:
             loan_history.append(Loan(name=l['name'], email=l['email'], account_type=l['account_type'], account_number=l['account_number'], govt_id_type=l['govt_id_type'], govt_id_number=l['govt_id_number'], loan_type=l['loan_type'], loan_amount=l['loan_amount'], interest_rate=l['interest_rate'], time_period=l['time_period'], status=l['status'], timestamp=f"{l['timestamp']}"))
@@ -197,7 +204,9 @@ def get_loan_history():
     logging.debug("----------------> Request: /loan/history")
     d = request.json
     logging.debug(f"Request: {d}")
-    response = loan_generic.getLoanHistory({"email": d['email']})
+    page = d.get("page", 1) if d else 1
+    page_size = d.get("page_size", 20) if d else 20
+    response = loan_generic.getLoanHistory({"email": d['email']}, page=page, page_size=page_size)
     return jsonify(response)
 
 
@@ -205,7 +214,7 @@ def get_loan_history():
 
 def serverGRPC(port):
     logging.debug(f"Starting GRPC server on port {port}")
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=int(os.getenv('GRPC_MAX_WORKERS', '50'))))
     loan_pb2_grpc.add_LoanServiceServicer_to_server(LoanService(), server)
     server.add_insecure_port(f"[::]:{port}")
     server.start()
