@@ -98,13 +98,19 @@ class TransactionGeneric:
 
     def GetTransactionsHistory(self, request, page=1, page_size=20):
         account_number = request.account_number
-        page_size = min(max(1, page_size), 100)
-        page = max(1, page)
-        skip = (page - 1) * page_size
 
-        transactions = collection_transactions.find(
-            {"$or": [{"sender": account_number}, {"receiver": account_number}]}
-        ).skip(skip).limit(page_size)
+        if page_size == 0:
+            # page_size=0 means no pagination (return all results)
+            transactions = collection_transactions.find(
+                {"$or": [{"sender": account_number}, {"receiver": account_number}]}
+            )
+        else:
+            page_size = min(max(1, page_size), 100)
+            page = max(1, page)
+            skip = (page - 1) * page_size
+            transactions = collection_transactions.find(
+                {"$or": [{"sender": account_number}, {"receiver": account_number}]}
+            ).skip(skip).limit(page_size)
 
         transactions_list = []
         for t in transactions:
@@ -230,7 +236,7 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
             )
 
     def getTransactionsHistory(self, request, context):
-        results = self.transaction.GetTransactionsHistory(request, page=1, page_size=10000)
+        results = self.transaction.GetTransactionsHistory(request, page_size=0)
         transactions_list = []
         for t in results:
             temp_t = Transaction(

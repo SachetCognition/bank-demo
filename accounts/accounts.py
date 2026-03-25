@@ -97,11 +97,15 @@ class AccountsGeneric:
 
     def getAccounts(self, request, page=1, page_size=20):
         email_id = request.email_id
-        page_size = min(max(1, page_size), 100)
-        page = max(1, page)
-        skip = (page - 1) * page_size
 
-        accounts = collection.find({"email_id": email_id}).skip(skip).limit(page_size)
+        if page_size == 0:
+            # page_size=0 means no pagination (return all results)
+            accounts = collection.find({"email_id": email_id})
+        else:
+            page_size = min(max(1, page_size), 100)
+            page = max(1, page)
+            skip = (page - 1) * page_size
+            accounts = collection.find({"email_id": email_id}).skip(skip).limit(page_size)
         account_list = []
         for account in accounts:
             acc = {
@@ -151,7 +155,7 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
     def getAccounts(self, request, context):
         # return self.accounts.getAccounts(request)
-        accounts = self.accounts.getAccounts(request, page=1, page_size=10000)
+        accounts = self.accounts.getAccounts(request, page_size=0)
         account_list = []
         for account in accounts:
             account_list.append(
