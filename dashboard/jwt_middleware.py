@@ -15,7 +15,8 @@ def require_jwt(f):
         token = request.cookies.get("jwt")
         # Then check Authorization header
         if not token:
-            token = request.headers.get("Authorization")
+            auth_header = request.headers.get("Authorization")
+            token = auth_header.split(" ", 1)[-1] if auth_header else None
         if not token:
             return jsonify({"message": "Not authorized, no token"}), 401
         try:

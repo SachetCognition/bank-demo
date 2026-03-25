@@ -628,12 +628,21 @@ def loan_history():
 
 
 def _proxy_headers():
-    """Build headers to forward JWT credentials to backend services."""
+    """Build headers to forward JWT and CSRF credentials to backend services."""
     headers = {}
+    # Forward cookies (JWT + CSRF)
+    cookies = []
     if request.cookies.get('jwt'):
-        headers['Cookie'] = f'jwt={request.cookies.get("jwt")}'
+        cookies.append(f'jwt={request.cookies.get("jwt")}')
+    if request.cookies.get('csrf_token'):
+        cookies.append(f'csrf_token={request.cookies.get("csrf_token")}')
+    if cookies:
+        headers['Cookie'] = '; '.join(cookies)
     if request.headers.get('Authorization'):
         headers['Authorization'] = request.headers.get('Authorization')
+    # Forward CSRF token header
+    if request.headers.get('X-CSRF-Token'):
+        headers['X-CSRF-Token'] = request.headers.get('X-CSRF-Token')
     return headers
 
 
@@ -648,7 +657,8 @@ def register_user():
     )
 
     user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users", json=request.json
+        f"http://{customer_auth_host}:8000/api/users", json=request.json,
+        headers=_proxy_headers()
     ).json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users: {user_data}"
@@ -668,7 +678,8 @@ def login_user():
     )
 
     user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users/auth", json=request.json
+        f"http://{customer_auth_host}:8000/api/users/auth", json=request.json,
+        headers=_proxy_headers()
     ).json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users/auth: {user_data}"
@@ -688,7 +699,8 @@ def logout_user():
     )
 
     user_data = flask_client_requests.post(
-        f"http://{customer_auth_host}:8000/api/users/logout", json=request.json
+        f"http://{customer_auth_host}:8000/api/users/logout", json=request.json,
+        headers=_proxy_headers()
     ).json()
     logging.debug(
         f"=========================> response from {customer_auth_host}:8000/api/users/logout: {user_data}"
