@@ -13,11 +13,19 @@ import logging
 from dotmap import DotMap
 from pymongo.mongo_client import MongoClient
 from flask import Flask, request, jsonify
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from validation import sanitize_mongo_input
 # set logging to debug
 logging.basicConfig(level=logging.DEBUG)
 
 from dotenv import load_dotenv
 load_dotenv()
+
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from audit.audit_logger import log_audit
+from crypto_utils import encrypt_value, decrypt_value, mask_value
 
 # db_host = os.getenv("DATABASE_HOST", "localhost")
 db_url = os.getenv("DB_URL")
@@ -40,6 +48,10 @@ client = MongoClient(uri)
 db = client["bank"]
 collection = db["accounts"]
 
+collection.create_index("email_id")
+collection.create_index("account_number", unique=True)
+collection.create_index([("email_id", 1), ("account_type", 1)])
+
 
 class AccountsGeneric:
     def getAccountDetails(self, request):
@@ -49,7 +61,13 @@ class AccountsGeneric:
       
 
         if account:
-            return  {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
+            account_data = {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
+            if "govt_id_number" in account:
+                try:
+                    account_data["govt_id_number"] = mask_value(decrypt_value(account["govt_id_number"]))
+                except Exception:
+                    account_data["govt_id_number"] = mask_value(account["govt_id_number"])
+            return account_data
     
 
         return {}
@@ -87,29 +105,23 @@ class AccountsGeneric:
         ] = f"IBAN{random.randint(1000000000000000, 9999999999999999)}"
         # timestamp  the account creation
         account["created_at"] = datetime.datetime.now()
+        # Encrypt govt_id_number before storing
+        account["govt_id_number"] = encrypt_value(request.govt_id_number)
+
         # insert the account into the list of accounts
         collection.insert_one(account)
+        log_audit("account_creation", request.email_id, {"account_type": request.account_type, "account_number": account["account_number"]}, service_name="accounts")
         return True  # CreateAccountResponse(result=True)
 
-    def getAccounts(self, request):
+    def getAccounts(self, request, page=1, page_size=20, max_page_size=100):
         email_id = request.email_id
-        accounts = collection.find({"email_id": email_id})
+        page_size = min(max(1, page_size), max_page_size)
+        page = max(1, page)
+        skip = (page - 1) * page_size
+
+        accounts = collection.find({"email_id": email_id}).skip(skip).limit(page_size)
         account_list = []
         for account in accounts:
-            # logging.debug(account["balance"])
-            # account_list.append(
-            #     Account(
-            #         account_number=account["account_number"],
-            #         email_id=account["email_id"],
-            #         account_type=account["account_type"],
-            #         address=account["address"],
-            #         govt_id_number=account["govt_id_number"],
-            #         government_id_type=account["government_id_type"],
-            #         name=account["name"],
-            #         balance=account["balance"],
-            #         currency=account["currency"],
-            #     )
-            # )
             acc = {
                 k: v
                 for k, v in account.items()
@@ -126,6 +138,11 @@ class AccountsGeneric:
                     "currency",
                 ]
             }
+            if "govt_id_number" in acc:
+                try:
+                    acc["govt_id_number"] = mask_value(decrypt_value(acc["govt_id_number"]))
+                except Exception:
+                    acc["govt_id_number"] = mask_value(acc["govt_id_number"])
             account_list.append(acc)
 
         return account_list
@@ -157,7 +174,7 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
     def getAccounts(self, request, context):
         # return self.accounts.getAccounts(request)
-        accounts = self.accounts.getAccounts(request)
+        accounts = self.accounts.getAccounts(request, page=1, page_size=10000, max_page_size=10000)
         account_list = []
         for account in accounts:
             account_list.append(
@@ -180,7 +197,7 @@ app = Flask(__name__)
 accounts_generic = AccountsGeneric()
 @app.route("/account-detail", methods=["POST"])
 def getAccountDetails():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     # account_number = request.json["account_number"]
     account = accounts_generic.getAccountDetails(data)
@@ -188,28 +205,30 @@ def getAccountDetails():
 
 @app.route("/create-account", methods=["POST"])
 def createAccount():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = accounts_generic.createAccount(data)
     return jsonify(result)
 
 @app.route("/get-all-accounts", methods=["POST"])
 def getAccounts():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
+    page = data.get("page", 1) if data else 1
+    page_size = data.get("page_size", 20) if data else 20
     data = DotMap(data)
-    accounts = accounts_generic.getAccounts(data)
+    accounts = accounts_generic.getAccounts(data, page=page, page_size=page_size)
     return jsonify(accounts)
 
 
 
 def serverFlask(port):
     logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)    
+    app.run(host='0.0.0.0' ,port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')    
 
 
 def serverGRPC(port):
     # recommendations_host = os.getenv("RECOMMENDATIONS_HOST", "localhost")
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=int(os.getenv('GRPC_MAX_WORKERS', '50'))))
     accounts_pb2_grpc.add_AccountDetailsServiceServicer_to_server(
         AccountDetailsService(), server
     )

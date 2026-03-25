@@ -11,22 +11,34 @@ import {
   logoutUser,
   getUserProfile,
   updateUserProfile,
+  setup2FA,
+  verify2FA,
+  dataErasure,
+  dataExport,
 } from "../controllers/userController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { registerValidation, loginValidation } from "../middleware/validationMiddleware.js";
+import { generateCsrfToken, validateCsrf } from "../middleware/csrfMiddleware.js";
 
 const router = express.Router();
 
-router.post("/", registerUser);
+router.get("/csrf-token", generateCsrfToken);
 
-router.post("/auth", authUser);
+router.post("/", registerValidation, registerUser);
+
+router.post("/auth", loginValidation, authUser);
 
 router.post("/logout", logoutUser);
 
-router.route("/profile").post(getUserProfile).put(updateUserProfile);
+router
+  .route("/profile")
+  .get(protect, getUserProfile)
+  .put(protect, validateCsrf, updateUserProfile);
 
-// router
-//   .route("/profile")
-//   .get(protect, getUserProfile)
-//   .put(protect, updateUserProfile);
+router.post("/2fa/setup", protect, setup2FA);
+router.post("/2fa/verify", protect, verify2FA);
+
+router.delete("/data-erasure", protect, dataErasure);
+router.get("/data-export", protect, dataExport);
 
 export default router;

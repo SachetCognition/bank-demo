@@ -1,0 +1,27 @@
+import os
+import jwt
+from functools import wraps
+from flask import request, jsonify
+
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+
+def require_jwt(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        # Check cookie first
+        token = request.cookies.get("jwt")
+        # Then check Authorization header
+        if not token:
+            token = request.headers.get("Authorization")
+        if not token:
+            return jsonify({"message": "Not authorized, no token"}), 401
+        try:
+            decoded = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            request.user_id = decoded.get("userId")
+        except jwt.ExpiredSignatureError:
+            return jsonify({"message": "Token has expired"}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({"message": "Not authorized, token failed"}), 401
+        return f(*args, **kwargs)
+    return decorated

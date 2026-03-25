@@ -11,6 +11,10 @@ from flask import Flask, request, jsonify
 
 from dotmap import DotMap
 
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from validation import sanitize_mongo_input
+
 # Configure the logging settings
 import logging
 
@@ -25,6 +29,11 @@ from google.protobuf.json_format import MessageToDict
 
 from dotenv import load_dotenv
 load_dotenv()
+
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from audit.audit_logger import log_audit
+from aml_monitor import check_transaction
 
 import logging
 
@@ -57,6 +66,16 @@ client = MongoClient(uri)
 db = client["bank"]
 collection_accounts = db["accounts"]
 collection_transactions = db["transactions"]
+collection_limits = db["transaction_limits"]
+
+DEFAULT_DAILY_LIMIT = 50000  # EUR
+DEFAULT_PER_TRANSACTION_LIMIT = 25000  # EUR
+
+collection_transactions.create_index("sender")
+collection_transactions.create_index("receiver")
+collection_transactions.create_index("time_stamp")
+collection_accounts.create_index("account_number", unique=True)
+collection_accounts.create_index("email_id")
 
 
 class TransactionGeneric:
@@ -90,33 +109,25 @@ class TransactionGeneric:
             "transaction_id": str(transaction["_id"]),
         }
 
-    def GetTransactionsHistory(self, request):
+    def GetTransactionsHistory(self, request, page=1, page_size=20, max_page_size=100):
         account_number = request.account_number
-        # logging.debug(f"Account Number: {account_number}")
+        page_size = min(max(1, page_size), max_page_size)
+        page = max(1, page)
+        skip = (page - 1) * page_size
 
-        # find based on account number only based on sender
-        transactions_credit = collection_transactions.find({"sender": account_number})
-        transactions_debit = collection_transactions.find({"receiver": account_number})
+        transactions = collection_transactions.find(
+            {"$or": [{"sender": account_number}, {"receiver": account_number}]}
+        ).skip(skip).limit(page_size)
 
         transactions_list = []
-        for t in transactions_credit:
+        for t in transactions:
+            t_type = "debit" if t["sender"] == account_number else "credit"
             temp_t = {
                 "account_number": t["receiver"],
                 "amount": t["amount"],
                 "reason": t["reason"],
                 "time_stamp": f"{t['time_stamp']}",
-                "type": "credit",
-                "transaction_id": str(t["_id"]),
-            }
-            transactions_list.append(temp_t)
-
-        for t in transactions_debit:
-            temp_t = {
-                "account_number": t["receiver"],
-                "amount": t["amount"],
-                "reason": t["reason"],
-                "time_stamp": f"{t['time_stamp']}",
-                "type": "credit",
+                "type": t_type,
                 "transaction_id": str(t["_id"]),
             }
             transactions_list.append(temp_t)
@@ -133,6 +144,35 @@ class TransactionGeneric:
 
         return self.__transfer(sender_account, receiver_account, amount, reason)
 
+    def __check_limits(self, sender_account_number, amount):
+        """Check transaction limits. Returns (allowed, message)."""
+        # Check per-transaction limit
+        limit_doc = collection_limits.find_one({"account_number": sender_account_number})
+        per_tx_limit = DEFAULT_PER_TRANSACTION_LIMIT
+        daily_limit = DEFAULT_DAILY_LIMIT
+
+        if limit_doc:
+            per_tx_limit = limit_doc.get("per_transaction_limit", DEFAULT_PER_TRANSACTION_LIMIT)
+            daily_limit = limit_doc.get("daily_limit", DEFAULT_DAILY_LIMIT)
+
+        if amount > per_tx_limit:
+            return False, f"Amount {amount} exceeds per-transaction limit of {per_tx_limit}"
+
+        # Check daily limit
+        today_start = datetime.datetime.combine(datetime.date.today(), datetime.time.min)
+        daily_total = 0
+        daily_transactions = collection_transactions.find({
+            "sender": sender_account_number,
+            "time_stamp": {"$gte": today_start}
+        })
+        for t in daily_transactions:
+            daily_total += t.get("amount", 0)
+
+        if daily_total + amount > daily_limit:
+            return False, f"Daily limit of {daily_limit} would be exceeded. Today's total: {daily_total}"
+
+        return True, "OK"
+
     def __transfer(self, sender_account, receiver_account, amount, reason):
         # if sender_account is not None or receiver_account is not None:
 
@@ -142,6 +182,10 @@ class TransactionGeneric:
         if receiver_account is None:
             return {"approved": False, "message": "Receiver Account Not Found."}
 
+        # Check transaction limits before processing
+        allowed, limit_message = self.__check_limits(sender_account["account_number"], amount)
+        if not allowed:
+            return {"approved": False, "message": limit_message}
 
         result = self.__doTransaction(
             sender_account, receiver_account, amount, reason=reason
@@ -154,82 +198,57 @@ class TransactionGeneric:
         if sender["balance"] < amount:
             return {"approved": False, "message": "Insufficient Balance"}
 
-        sender["balance"] -= amount
-        receiver["balance"] += amount
+        with client.start_session() as session:
+            with session.start_transaction():
+                result = collection_accounts.update_one(
+                    {"account_number": sender["account_number"], "balance": {"$gte": amount}},
+                    {"$inc": {"balance": -amount}},
+                    session=session
+                )
+                if result.modified_count == 0:
+                    return {"approved": False, "message": "Insufficient Balance"}
 
-        # update sender account
-        collection_accounts.update_one(
-            {"account_number": sender["account_number"]},
-            {"$set": {"balance": sender["balance"]}},
-        )
+                collection_accounts.update_one(
+                    {"account_number": receiver["account_number"]},
+                    {"$inc": {"balance": amount}},
+                    session=session
+                )
+                collection_transactions.insert_one(
+                    {
+                        "sender": sender["account_number"],
+                        "receiver": receiver["account_number"],
+                        "amount": amount,
+                        "reason": reason,
+                        "time_stamp": datetime.datetime.now(),
+                    },
+                    session=session
+                )
 
-        # update receiver account
-        collection_accounts.update_one(
-            {"account_number": receiver["account_number"]},
-            {"$set": {"balance": receiver["balance"]}},
-        )
+        # Audit logging
+        log_audit("transfer", sender["email_id"] if "email_id" in sender else "unknown", {"sender": sender["account_number"], "receiver": receiver["account_number"], "amount": amount, "reason": reason}, service_name="transactions")
 
-        # add transaction
-        collection_transactions.insert_one(
-            {
-                "sender": sender["account_number"],
-                "receiver": receiver["account_number"],
-                "amount": amount,
-                "reason": reason,
-                "time_stamp": datetime.datetime.now(),
-            }
-        )
+        # AML monitoring
+        check_transaction(sender["account_number"], receiver["account_number"], amount, reason)
 
         return {"approved": True, "message": "Transaction is Successful."}
 
     def __getAccountwithEmail(self, email):
         logging.debug(f"Email: {email}")
-        # log the document with the email
-        logging.debug(
-            f"Document with email: {collection_accounts.count_documents({'email_id': email, 'account_type': 'Checking'})}"
-        )
-
-        document = None
-
-        if (
-            collection_accounts.count_documents(
-                {"email_id": email, "account_type": "Checking"}
-            )
-            == 1
-        ):
-            checking_account = collection_accounts.find(
-                {"email_id": email, "account_type": "Checking"}
-            )
-            document = checking_account[0]
+        # Try checking account first
+        document = collection_accounts.find_one({"email_id": email, "account_type": "Checking"})
+        if document:
             logging.debug(f"Checking Account: {document}")
             return document
-        else:
-            if (
-                collection_accounts.count_documents(
-                    {"email_id": email, "account_type": "Savings"}
-                )
-                == 1
-            ):
-                saving_account = collection_accounts.find(
-                    {"email_id": email, "account_type": "Savings"}
-                )
-                document = saving_account[0]
-                logging.debug(f"Savings Account: {document}")
-                return document
-            # logging.debug(f"Savings Account: {document}")
+        # Fall back to savings
+        document = collection_accounts.find_one({"email_id": email, "account_type": "Savings"})
+        if document:
+            logging.debug(f"Savings Account: {document}")
+            return document
         logging.debug("No Account Found")
-        return document
+        return None
 
     def __getAccount(self, account_num):
-        r = None
-        accounts = collection_accounts.find()
-        # logging.debug(f"Accounts: {list(accounts)}")
-        for acc in accounts:
-            if acc["account_number"] == account_num:
-                r = acc
-                break
-        # logging.debug(f"Account {r}")
-        return r
+        return collection_accounts.find_one({"account_number": account_num})
 
 
 class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
@@ -263,7 +282,7 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
             )
 
     def getTransactionsHistory(self, request, context):
-        results = self.transaction.GetTransactionsHistory(request)
+        results = self.transaction.GetTransactionsHistory(request, page=1, page_size=10000, max_page_size=10000)
         transactions_list = []
         for t in results:
             temp_t = Transaction(
@@ -288,7 +307,7 @@ transaction_generic = TransactionGeneric()
 
 @app.route("/transfer", methods=["POST"])
 def sendMoney():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.SendMoney(data)
     return jsonify(result)
@@ -296,7 +315,7 @@ def sendMoney():
 @app.route("/zelle", methods=["POST"])
 def zelle():
     logging.debug(" Zelle API called")
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.Zelle(data)
     return jsonify(result)
@@ -304,27 +323,29 @@ def zelle():
 @app.route("/transaction-with-id", methods=["POST"])
 def getTransactionByID():
     logging.debug(" Get Transaction By ID API called")
-    data = request.json
+    data = sanitize_mongo_input(request.json)
     data = DotMap(data)
     result = transaction_generic.GetTransactionByID(data)
     return jsonify(result)
 
 @app.route("/transaction-history", methods=["POST"])
 def getTransactionsHistory():
-    data = request.json
+    data = sanitize_mongo_input(request.json)
+    page = data.get("page", 1) if data else 1
+    page_size = data.get("page_size", 20) if data else 20
     data = DotMap(data)
-    result = transaction_generic.GetTransactionsHistory(data)
+    result = transaction_generic.GetTransactionsHistory(data, page=page, page_size=page_size)
     return jsonify(result)
 
 
 
 def serverFlask(port):
     logging.debug(f"Starting Flask server on port {port}")
-    app.run(host='0.0.0.0' ,port=port, debug=True)
+    app.run(host='0.0.0.0' ,port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
 
 
 def serverGRPC(port):
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=int(os.getenv('GRPC_MAX_WORKERS', '50'))))
     transaction_pb2_grpc.add_TransactionServiceServicer_to_server(
         TransactionService(), server
     )

@@ -9,10 +9,15 @@ services:
       image: mongo
       restart: always
       environment:
-        MONGO_INITDB_ROOT_USERNAME: root
-        MONGO_INITDB_ROOT_PASSWORD: example
+        MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-root}
+        MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-example}
+      command: ["--replSet", "rs0", "--bind_ip_all"]
       networks:
       - bankapp-network
+      healthcheck:
+        test: ["CMD", "mongosh", "--eval", "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}) }"]
+        interval: 10s
+        start_period: 30s
 
   ui:
     build:
@@ -86,6 +91,8 @@ services:
       ACCOUNT_HOST: accounts
       TRANSACTION_HOST: transactions
       LOAN_HOST: loan
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
     
@@ -97,6 +104,8 @@ services:
     hostname: accounts
     image: martian-bank-accounts
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
 
@@ -108,6 +117,8 @@ services:
     hostname: loan
     image: martian-bank-loan
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network
 
@@ -119,6 +130,8 @@ services:
     hostname: martian-bank-transactions
     image: martian-bank-transactions
     restart: always
+    environment:
+      FLASK_DEBUG: "false"
     networks:
       - bankapp-network 
 
