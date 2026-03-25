@@ -648,9 +648,11 @@ def _proxy_headers():
 
 def _proxy_response(backend_resp):
     """Create a Flask response that forwards Set-Cookie headers from backend."""
-    resp = make_response(json.dumps(backend_resp.json()))
+    resp = make_response(json.dumps(backend_resp.json()), backend_resp.status_code)
     resp.headers['Content-Type'] = 'application/json'
-    for cookie_header in backend_resp.headers.getlist('Set-Cookie'):
+    # requests.structures.CaseInsensitiveDict does not have getlist();
+    # use raw urllib3 headers which do support it.
+    for cookie_header in backend_resp.raw.headers.getlist('Set-Cookie'):
         resp.headers.add('Set-Cookie', cookie_header)
     return resp
 
