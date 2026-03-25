@@ -24,9 +24,9 @@ const router = express.Router();
 
 router.get("/csrf-token", generateCsrfToken);
 
-router.post("/", registerValidation, validateCsrf, registerUser);
+router.post("/", registerValidation, registerUser);
 
-router.post("/auth", loginValidation, validateCsrf, authUser);
+router.post("/auth", loginValidation, authUser);
 
 router.post("/logout", logoutUser);
 

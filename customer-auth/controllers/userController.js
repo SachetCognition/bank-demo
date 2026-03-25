@@ -176,14 +176,14 @@ const getUserProfile = asyncHandler(async (req, res) => {
 // @access  Private
 const updateUserProfile = asyncHandler(async (req, res) => {
   try {
-    const user = await User.findOne({email: req.body.email});
+    const user = await User.findById(req.user._id);
 
     if (user) {
       user.password = req.body.password || user.password;
 
       const updatedUser = await user.save();
 
-      await logAudit('profile_update', req.body.email, {}, req.ip);
+      await logAudit('profile_update', user.email, {}, req.ip);
       res.json({
         _id: updatedUser._id,
         name: updatedUser.name,

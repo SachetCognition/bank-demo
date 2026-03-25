@@ -109,9 +109,9 @@ class TransactionGeneric:
             "transaction_id": str(transaction["_id"]),
         }
 
-    def GetTransactionsHistory(self, request, page=1, page_size=20):
+    def GetTransactionsHistory(self, request, page=1, page_size=20, max_page_size=100):
         account_number = request.account_number
-        page_size = min(max(1, page_size), 100)
+        page_size = min(max(1, page_size), max_page_size)
         page = max(1, page)
         skip = (page - 1) * page_size
 
@@ -121,7 +121,7 @@ class TransactionGeneric:
 
         transactions_list = []
         for t in transactions:
-            t_type = "credit" if t["sender"] == account_number else "debit"
+            t_type = "debit" if t["sender"] == account_number else "credit"
             temp_t = {
                 "account_number": t["receiver"],
                 "amount": t["amount"],
@@ -282,7 +282,7 @@ class TransactionService(transaction_pb2_grpc.TransactionServiceServicer):
             )
 
     def getTransactionsHistory(self, request, context):
-        results = self.transaction.GetTransactionsHistory(request, page=1, page_size=10000)
+        results = self.transaction.GetTransactionsHistory(request, page=1, page_size=10000, max_page_size=10000)
         transactions_list = []
         for t in results:
             temp_t = Transaction(

@@ -63,7 +63,10 @@ class AccountsGeneric:
         if account:
             account_data = {'account_number': account["account_number"],'name': account["name"], 'balance': account["balance"], 'currency': account["currency"]}
             if "govt_id_number" in account:
-                account_data["govt_id_number"] = mask_value(decrypt_value(account["govt_id_number"]))
+                try:
+                    account_data["govt_id_number"] = mask_value(decrypt_value(account["govt_id_number"]))
+                except Exception:
+                    account_data["govt_id_number"] = mask_value(account["govt_id_number"])
             return account_data
     
 
@@ -110,9 +113,9 @@ class AccountsGeneric:
         log_audit("account_creation", request.email_id, {"account_type": request.account_type, "account_number": account["account_number"]}, service_name="accounts")
         return True  # CreateAccountResponse(result=True)
 
-    def getAccounts(self, request, page=1, page_size=20):
+    def getAccounts(self, request, page=1, page_size=20, max_page_size=100):
         email_id = request.email_id
-        page_size = min(max(1, page_size), 100)
+        page_size = min(max(1, page_size), max_page_size)
         page = max(1, page)
         skip = (page - 1) * page_size
 
@@ -136,7 +139,10 @@ class AccountsGeneric:
                 ]
             }
             if "govt_id_number" in acc:
-                acc["govt_id_number"] = mask_value(decrypt_value(acc["govt_id_number"]))
+                try:
+                    acc["govt_id_number"] = mask_value(decrypt_value(acc["govt_id_number"]))
+                except Exception:
+                    acc["govt_id_number"] = mask_value(acc["govt_id_number"])
             account_list.append(acc)
 
         return account_list
@@ -168,7 +174,7 @@ class AccountDetailsService(accounts_pb2_grpc.AccountDetailsServiceServicer):
 
     def getAccounts(self, request, context):
         # return self.accounts.getAccounts(request)
-        accounts = self.accounts.getAccounts(request, page=1, page_size=10000)
+        accounts = self.accounts.getAccounts(request, page=1, page_size=10000, max_page_size=10000)
         account_list = []
         for account in accounts:
             account_list.append(
