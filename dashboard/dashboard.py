@@ -60,6 +60,7 @@ collection = db["accounts"]
 
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
 allowed_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8080").split(",")
 CORS(app, resources={r"/*": {"origins": allowed_origins, "supports_credentials": True}})
 limiter = Limiter(app=app, key_func=get_remote_address, default_limits=["100 per minute"])
@@ -627,6 +628,7 @@ def loan_history():
 
 
 @app.route("/api/users", methods=["POST"])
+@csrf.exempt
 def register_user():
     logging.debug("=========================> register user called")
 
@@ -646,6 +648,7 @@ def register_user():
 
 
 @app.route("/api/users/auth", methods=["POST"])
+@csrf.exempt
 def login_user():
     logging.debug("=========================> login user called")
 
@@ -665,6 +668,7 @@ def login_user():
 
 
 @app.route("/api/users/logout", methods=["POST"])
+@csrf.exempt
 def logout_user():
     logging.debug("=========================> logout user called")
 
@@ -684,6 +688,7 @@ def logout_user():
 
 
 @app.route("/api/users/profile", methods=["GET", "PUT"])
+@csrf.exempt
 def profile_user():
     logging.debug("=========================> profile user called")
 
@@ -712,6 +717,7 @@ def profile_user():
 
 
 @app.route("/api/atm/", methods=["POST"])
+@csrf.exempt
 def get_atms():
     logging.debug("=========================> get atms called")
 

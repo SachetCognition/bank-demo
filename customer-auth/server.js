@@ -57,7 +57,7 @@ const registrationLimiter = rateLimit({
 
 app.use(generalLimiter);
 app.use('/api/users/auth', loginLimiter);
-app.use('/api/users', registrationLimiter);
+app.post('/api/users', registrationLimiter);
 
 // mounting routes
 app.use('/api/users', userRoutes);

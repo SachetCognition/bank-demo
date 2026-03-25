@@ -126,11 +126,11 @@ const logoutUser = (req, res) => {
 };
 
 // @desc    Get user profile
-// @route   POST api/users/profile
+// @route   GET api/users/profile
 // @access  Private
 const getUserProfile = asyncHandler(async (req, res) => {
   try {
-    const user = await User.findOne({email: req.body.email});
+    const user = req.user;
 
     if (user) {
       res.json({
