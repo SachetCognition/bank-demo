@@ -11,6 +11,10 @@ import {
   logoutUser,
   getUserProfile,
   updateUserProfile,
+  setup2FA,
+  verify2FA,
+  dataErasure,
+  dataExport,
 } from "../controllers/userController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import { registerValidation, loginValidation } from "../middleware/validationMiddleware.js";
@@ -30,5 +34,11 @@ router
   .route("/profile")
   .get(protect, getUserProfile)
   .put(protect, validateCsrf, updateUserProfile);
+
+router.post("/2fa/setup", protect, setup2FA);
+router.post("/2fa/verify", protect, verify2FA);
+
+router.delete("/data-erasure", protect, dataErasure);
+router.get("/data-export", protect, dataExport);
 
 export default router;
