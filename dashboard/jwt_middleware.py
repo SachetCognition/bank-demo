@@ -3,7 +3,9 @@ import jwt
 from functools import wraps
 from flask import request, jsonify
 
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is not set")
 
 def require_jwt(f):
     @wraps(f)

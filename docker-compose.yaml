@@ -87,6 +87,7 @@ services:
       TRANSACTION_HOST: transactions
       LOAN_HOST: loan
       FLASK_DEBUG: "false"
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-in-production}
     networks:
       - bankapp-network
     
