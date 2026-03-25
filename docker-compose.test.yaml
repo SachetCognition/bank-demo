@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  test-runner:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    depends_on:
+      - mongo
+      - dashboard
+      - customer-auth
+      - accounts
+      - transactions
+      - loan
+      - atm-locator
+      - ui
+    volumes:
+      - ./artifacts:/app/artifacts
+    networks:
+      - bankapp-network
+
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    networks:
+      - bankapp-network
+
+networks:
+  bankapp-network:
+    driver: bridge
